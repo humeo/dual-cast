@@ -1,9 +1,9 @@
 {
-  "name": "hn-dual-extension",
-  "displayName": "HN Dual - Hacker News 双语阅读",
+  "name": "dualcast",
+  "displayName": "DualCast - Bilingual Reader & AI Summary",
   "version": "0.1.0",
-  "description": "为 Hacker News 和任何网页提供双语翻译功能",
-  "author": "HN Dual",
+  "description": "Translate any webpage into bilingual view with AI-powered summaries",
+  "author": "DualCast",
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",
