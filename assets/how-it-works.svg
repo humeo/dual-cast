@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8fafc"/>
+      <stop offset="100%" style="stop-color:#eef2ff"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="indigo" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4338ca"/>
+      <stop offset="100%" style="stop-color:#6366f1"/>
+    </linearGradient>
+    <filter id="card">
+      <feDropShadow dx="0" dy="2" stdDeviation="8" flood-color="rgba(0,0,0,0.08)"/>
+    </filter>
+  </defs>
+
+  <rect width="900" height="500" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="450" y="55" text-anchor="middle" font-family="'SF Pro Display', -apple-system, sans-serif" font-size="28" font-weight="700" fill="#1e1b4b" letter-spacing="-0.5">How DualCast Works</text>
+  <text x="450" y="82" text-anchor="middle" font-family="'SF Pro Text', sans-serif" font-size="14" fill="#6b7280">Three simple steps to bilingual reading</text>
+
+  <!-- Step 1 -->
+  <g transform="translate(50, 120)">
+    <rect x="0" y="0" width="250" height="320" rx="16" fill="white" filter="url(#card)"/>
+
+    <!-- Step number -->
+    <circle cx="125" cy="50" r="24" fill="url(#indigo)"/>
+    <text x="125" y="57" text-anchor="middle" font-family="'SF Pro Display', sans-serif" font-size="18" font-weight="700" fill="white">1</text>
+
+    <!-- Icon -->
+    <g transform="translate(100, 90)">
+      <rect x="0" y="0" width="50" height="50" rx="12" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1"/>
+      <g transform="translate(11, 11)">
+        <rect x="2" y="2" width="20" height="20" rx="2" fill="none" stroke="#4f46e5" stroke-width="2"/>
+        <line x1="7" y1="8" x2="17" y2="8" stroke="#4f46e5" stroke-width="1.5"/>
+        <line x1="7" y1="12" x2="15" y2="12" stroke="#4f46e5" stroke-width="1.5"/>
+        <line x1="7" y1="16" x2="13" y2="16" stroke="#4f46e5" stroke-width="1.5"/>
+      </g>
+    </g>
+
+    <text x="125" y="170" text-anchor="middle" font-family="'SF Pro Display', sans-serif" font-size="17" font-weight="700" fill="#1e1b4b">Browse Any Page</text>
+
+    <text x="125" y="200" text-anchor="middle" font-family="'SF Pro Text', sans-serif" font-size="13" fill="#6b7280">
+      <tspan x="125" dy="0">Visit any webpage —</tspan>
+      <tspan x="125" dy="20">news, blogs, articles,</tspan>
+      <tspan x="125" dy="20">Hacker News, and more.</tspan>
+      <tspan x="125" dy="20">DualCast auto-detects</tspan>
+      <tspan x="125" dy="20">translatable content.</tspan>
+    </text>
+  </g>
+
+  <!-- Step 2 -->
+  <g transform="translate(325, 120)">
+    <rect x="0" y="0" width="250" height="320" rx="16" fill="white" filter="url(#card)"/>
+
+    <circle cx="125" cy="50" r="24" fill="url(#indigo)"/>
+    <text x="125" y="57" text-anchor="middle" font-family="'SF Pro Display', sans-serif" font-size="18" font-weight="700" fill="white">2</text>
+
+    <!-- Icon -->
+    <g transform="translate(100, 90)">
+      <rect x="0" y="0" width="50" height="50" rx="12" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1"/>
+      <g transform="translate(13, 13)">
+        <circle cx="12" cy="12" r="10" fill="none" stroke="#4f46e5" stroke-width="2"/>
+        <line x1="2" y1="12" x2="22" y2="12" stroke="#4f46e5" stroke-width="1.5"/>
+        <path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z" fill="none" stroke="#4f46e5" stroke-width="1.5"/>
+      </g>
+    </g>
+
+    <text x="125" y="170" text-anchor="middle" font-family="'SF Pro Display', sans-serif" font-size="17" font-weight="700" fill="#1e1b4b">Click Translate</text>
+
+    <text x="125" y="200" text-anchor="middle" font-family="'SF Pro Text', sans-serif" font-size="13" fill="#6b7280">
+      <tspan x="125" dy="0">One click in the popup</tspan>
+      <tspan x="125" dy="20">or the floating button.</tspan>
+      <tspan x="125" dy="20">DualCast translates</tspan>
+      <tspan x="125" dy="20">via DeepL or OpenAI,</tspan>
+      <tspan x="125" dy="20">showing bilingual text.</tspan>
+    </text>
+  </g>
+
+  <!-- Step 3 -->
+  <g transform="translate(600, 120)">
+    <rect x="0" y="0" width="250" height="320" rx="16" fill="white" filter="url(#card)"/>
+
+    <circle cx="125" cy="50" r="24" fill="url(#purple)"/>
+    <text x="125" y="57" text-anchor="middle" font-family="'SF Pro Display', sans-serif" font-size="18" font-weight="700" fill="white">3</text>
+
+    <!-- Icon -->
+    <g transform="translate(100, 90)">
+      <rect x="0" y="0" width="50" height="50" rx="12" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1"/>
+      <g transform="translate(13, 13)">
+        <polygon points="12 2 15 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 9 8.3 12 2" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+
+    <text x="125" y="170" text-anchor="middle" font-family="'SF Pro Display', sans-serif" font-size="17" font-weight="700" fill="#1e1b4b">AI Summarize</text>
+
+    <text x="125" y="200" text-anchor="middle" font-family="'SF Pro Text', sans-serif" font-size="13" fill="#6b7280">
+      <tspan x="125" dy="0">Get an instant AI</tspan>
+      <tspan x="125" dy="20">summary of any article.</tspan>
+      <tspan x="125" dy="20">Powered by OpenAI,</tspan>
+      <tspan x="125" dy="20">saved to your history</tspan>
+      <tspan x="125" dy="20">for later reference.</tspan>
+    </text>
+  </g>
+
+  <!-- Connecting arrows -->
+  <g transform="translate(300, 270)">
+    <line x1="0" y1="0" x2="25" y2="0" stroke="#c7d2fe" stroke-width="2" stroke-dasharray="4 3"/>
+    <polygon points="25,-4 33,0 25,4" fill="#c7d2fe"/>
+  </g>
+  <g transform="translate(575, 270)">
+    <line x1="0" y1="0" x2="25" y2="0" stroke="#ddd6fe" stroke-width="2" stroke-dasharray="4 3"/>
+    <polygon points="25,-4 33,0 25,4" fill="#ddd6fe"/>
+  </g>
+</svg>
