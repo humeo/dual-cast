@@ -83,11 +83,11 @@
 
     <!-- Toggle button -->
     <rect x="38" y="268" width="370" height="38" rx="10" fill="white" stroke="#e5e7eb" stroke-width="1"/>
-    <g transform="translate(178, 278)">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" transform="scale(0.65)"/>
-      <circle cx="7.8" cy="7.8" r="2" fill="none" stroke="#6b7280" stroke-width="1.5"/>
+    <g transform="translate(155, 280)">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="scale(0.58)"/>
+      <circle cx="7" cy="7" r="1.8" fill="none" stroke="#6b7280" stroke-width="1.5"/>
     </g>
-    <text x="220" y="292" text-anchor="middle" font-family="'SF Pro Text', sans-serif" font-size="12" fill="#6b7280">Hide Translations</text>
+    <text x="230" y="292" text-anchor="middle" font-family="'SF Pro Text', sans-serif" font-size="12" fill="#6b7280">Hide Translations</text>
 
     <!-- Progress card -->
     <rect x="38" y="322" width="370" height="80" rx="12" fill="white" stroke="#c7d2fe" stroke-width="1"/>
