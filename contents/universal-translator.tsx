@@ -92,6 +92,9 @@ async function translatePage() {
     return
   }
 
+  const settings = await chrome.storage.sync.get(["targetLang"])
+  const targetLang = settings.targetLang || "zh"
+
   const total =
     (article.paragraphs.length > 0 ? 1 : 0) + // 标题
     article.paragraphs.filter((p) => !p.querySelector(".hn-dual-translation")).length
@@ -105,7 +108,7 @@ async function translatePage() {
       const response = await chrome.runtime.sendMessage({
         type: "TRANSLATE",
         text: article.title,
-        targetLang: "zh"
+        targetLang
       })
       if (response.translation) {
         const div = document.createElement("div")
@@ -139,7 +142,7 @@ async function translatePage() {
       const response = await chrome.runtime.sendMessage({
         type: "TRANSLATE",
         text,
-        targetLang: "zh"
+        targetLang
       })
       if (response.translation) {
         const div = document.createElement("div")

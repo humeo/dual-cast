@@ -154,7 +154,13 @@ async function handleTranslation(text: string, targetLang: string): Promise<stri
 
 // OpenAI 翻译
 async function translateWithOpenAI(text: string, targetLang: string, apiKey: string, baseUrl: string, model: string): Promise<string> {
-  const targetLanguage = targetLang === "zh" ? "中文" : "English"
+  const langNames: Record<string, string> = {
+    zh: "Chinese", en: "English", ja: "Japanese", ko: "Korean",
+    de: "German", fr: "French", es: "Spanish", it: "Italian",
+    ru: "Russian", pt: "Portuguese", ar: "Arabic", nl: "Dutch",
+    pl: "Polish", tr: "Turkish", vi: "Vietnamese"
+  }
+  const targetLanguage = langNames[targetLang] || "Chinese"
 
   const response = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: "POST",
@@ -167,11 +173,11 @@ async function translateWithOpenAI(text: string, targetLang: string, apiKey: str
       messages: [
         {
           role: "system",
-          content: `你是专业的技术文章翻译助手。翻译时保持技术术语的准确性，使译文自然流畅。只返回翻译结果，不要添加任何解释。`
+          content: `You are a professional technical translator. Detect the language of the input text. If it is already in ${targetLanguage}, return it unchanged. Otherwise, translate it to ${targetLanguage} accurately and naturally. Return only the result, no explanations.`
         },
         {
           role: "user",
-          content: `翻译成${targetLanguage}：\n\n${text}`
+          content: text
         }
       ],
       temperature: 0.3
@@ -188,10 +194,12 @@ async function translateWithOpenAI(text: string, targetLang: string, apiKey: str
 }
 
 // DeepL 批量翻译（一次请求多个文本）
+// 返回的字符串若与原文相同，说明源语言已是目标语言，已跳过翻译
 async function translateBatchWithDeepL(texts: string[], targetLang: string, apiKey: string): Promise<string[]> {
   const langMap: Record<string, string> = {
     zh: "ZH", en: "EN", ja: "JA", ko: "KO",
-    de: "DE", fr: "FR", es: "ES", it: "IT", ru: "RU", pt: "PT"
+    de: "DE", fr: "FR", es: "ES", it: "IT", ru: "RU", pt: "PT",
+    ar: "AR", nl: "NL", pl: "PL", tr: "TR", vi: "VI"
   }
   const targetLangCode = langMap[targetLang] || "ZH"
   const isFreeAPI = apiKey.endsWith(":fx")
@@ -221,7 +229,16 @@ async function translateBatchWithDeepL(texts: string[], targetLang: string, apiK
     throw new Error("DeepL API 返回空结果")
   }
 
-  return data.translations.map((t: { text: string }) => t.text)
+  // 若检测到的源语言与目标语言相同，返回原文（跳过翻译）
+  return data.translations.map((t: { text: string; detected_source_language: string }, i: number) => {
+    const detectedLang = t.detected_source_language?.toLowerCase()
+    const normalizedTarget = targetLangCode.toLowerCase().replace("-", "_").split("_")[0]
+    if (detectedLang && detectedLang === normalizedTarget) {
+      console.log(`[HN Dual] 跳过翻译: 源语言 (${detectedLang}) 与目标语言 (${normalizedTarget}) 相同`)
+      return texts[i]
+    }
+    return t.text
+  })
 }
 
 // AI 摘要

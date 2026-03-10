@@ -89,6 +89,9 @@ let shouldStop = false
 async function translateCurrentPage() {
   console.log("开始翻译页面...")
 
+  const settings = await chrome.storage.sync.get(["targetLang"])
+  const targetLang = settings.targetLang || "zh"
+
   // 先统计总数
   const titleLinks = Array.from(
     document.querySelectorAll('.titleline > a:not([data-hn-dual-translated])')
@@ -119,7 +122,7 @@ async function translateCurrentPage() {
         const response = await chrome.runtime.sendMessage({
           type: "TRANSLATE",
           text,
-          targetLang: "zh"
+          targetLang
         })
 
         if (response.translation) {
@@ -162,7 +165,7 @@ async function translateCurrentPage() {
         const response = await chrome.runtime.sendMessage({
           type: "TRANSLATE",
           text,
-          targetLang: "zh"
+          targetLang
         })
 
         if (response.translation) {
@@ -200,7 +203,7 @@ async function translateCurrentPage() {
         const response = await chrome.runtime.sendMessage({
           type: "TRANSLATE",
           text,
-          targetLang: "zh"
+          targetLang
         })
 
         if (response.translation) {
