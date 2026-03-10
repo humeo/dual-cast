@@ -239,6 +239,47 @@ function IndexPopup() {
     setExpandedIndex(null)
   }
 
+  const handleExportHistory = () => {
+    const data = JSON.stringify({ version: 1, exportedAt: Date.now(), summaryHistory: history }, null, 2)
+    const blob = new Blob([data], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `dualcast-history-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportHistory = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string)
+        const imported: HistoryItem[] = Array.isArray(parsed.summaryHistory)
+          ? parsed.summaryHistory.filter(
+              (item: any) => item.url && item.title && item.summary && item.timestamp
+            )
+          : []
+        if (imported.length === 0) { alert("No valid history found in file"); return }
+        chrome.storage.local.get(["summaryHistory"], (stored) => {
+          const existing: HistoryItem[] = stored.summaryHistory || []
+          const existingUrls = new Set(existing.map((x) => `${x.url}:${x.timestamp}`))
+          const merged = [...imported.filter((x) => !existingUrls.has(`${x.url}:${x.timestamp}`)), ...existing]
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, 500)
+          chrome.storage.local.set({ summaryHistory: merged })
+          setHistory(merged)
+        })
+      } catch {
+        alert("Failed to parse file — make sure it's a valid DualCast export")
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ""
+  }
+
   const isTranslating = transStatus === "translating"
   const isSummarizing = summaryStatus === "summarizing"
   const hasApiKey = !!apiKey
@@ -733,23 +774,72 @@ function IndexPopup() {
             <span style={{ fontSize: "11px", color: C.textMuted, fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               {history.length} summaries
             </span>
-            {history.length > 0 && (
-              <button
-                onClick={handleClearHistory}
-                style={{
-                  padding: "5px 12px",
-                  background: "none",
-                  border: `1px solid ${C.border}`,
-                  borderRadius: "8px",
-                  fontSize: "11px",
-                  color: C.textMuted,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  transition: "all 0.15s",
-                }}>
-                Clear All
-              </button>
-            )}
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              {/* Import button */}
+              <label style={{
+                padding: "5px 10px",
+                background: "none",
+                border: `1px solid ${C.border}`,
+                borderRadius: "8px",
+                fontSize: "11px",
+                color: C.textMuted,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 0.15s",
+                userSelect: "none",
+              }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Import
+                <input type="file" accept=".json" onChange={handleImportHistory} style={{ display: "none" }} />
+              </label>
+              {/* Export button */}
+              {history.length > 0 && (
+                <button
+                  onClick={handleExportHistory}
+                  style={{
+                    padding: "5px 10px",
+                    background: "none",
+                    border: `1px solid ${C.border}`,
+                    borderRadius: "8px",
+                    fontSize: "11px",
+                    color: C.textMuted,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    transition: "all 0.15s",
+                  }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Export
+                </button>
+              )}
+              {/* Clear button */}
+              {history.length > 0 && (
+                <button
+                  onClick={handleClearHistory}
+                  style={{
+                    padding: "5px 10px",
+                    background: "none",
+                    border: `1px solid ${C.border}`,
+                    borderRadius: "8px",
+                    fontSize: "11px",
+                    color: C.textMuted,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    transition: "all 0.15s",
+                  }}>
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
 
           {history.length === 0 ? (
