@@ -41,47 +41,40 @@ function reportError(message: string) {
 
 // 检测文章内容
 function detectArticle() {
+  // 段落检测独立运行，不受 Readability 影响
+  const SELECTORS =
+    'article p, .post-content p, .entry-content p, .article-content p, ' +
+    '.content p, .story-body p, .article-body p, .td-post-content p, ' +
+    '.jeg_post_content p, main p, [role="main"] p, #content p, #main p'
+
+  let paragraphs = Array.from(document.querySelectorAll(SELECTORS))
+    .filter((p) => (p.textContent?.trim() || "").length > 50) as HTMLElement[]
+
+  // 兜底：页面上所有 <p>，过滤掉导航/页脚噪声
+  if (paragraphs.length === 0) {
+    paragraphs = Array.from(document.querySelectorAll('p'))
+      .filter((p) => {
+        const text = p.textContent?.trim() || ""
+        if (text.length < 50) return false
+        const tag = p.closest('nav, footer, header, aside')
+        return !tag
+      }) as HTMLElement[]
+  }
+
+  if (paragraphs.length === 0) return null
+
+  // Readability 单独 try/catch：失败时回退到 document.title
+  let title = document.title
   try {
     const documentClone = document.cloneNode(true) as Document
     const reader = new Readability(documentClone)
     const article = reader.parse()
-
-    // 尝试具体选择器
-    const SELECTORS =
-      'article p, .post-content p, .entry-content p, .article-content p, ' +
-      '.content p, .story-body p, .article-body p, .td-post-content p, ' +
-      '.jeg_post_content p, main p, [role="main"] p, #content p, #main p'
-
-    let paragraphs = Array.from(document.querySelectorAll(SELECTORS))
-      .filter((p) => (p.textContent?.trim() || "").length > 50) as HTMLElement[]
-
-    // 兜底：页面上所有 <p>，过滤掉导航/页脚噪声
-    if (paragraphs.length === 0) {
-      paragraphs = Array.from(document.querySelectorAll('p'))
-        .filter((p) => {
-          const text = p.textContent?.trim() || ""
-          if (text.length < 50) return false
-          // 跳过明显的导航/版权行
-          const tag = p.closest('nav, footer, header, aside')
-          return !tag
-        }) as HTMLElement[]
-    }
-
-    // Readability 成功：用解析到的标题
-    if (article && article.textContent && article.textContent.length >= 200) {
-      return { title: article.title, paragraphs }
-    }
-
-    // Readability 失败但页面有段落：用 document.title
-    if (paragraphs.length > 0) {
-      return { title: document.title, paragraphs }
-    }
-
-    return null
+    if (article?.title) title = article.title
   } catch (error) {
-    console.error("Article detection error:", error)
-    return null
+    console.error("Readability error (using document.title):", error)
   }
+
+  return { title, paragraphs }
 }
 
 function reportStopped() {
