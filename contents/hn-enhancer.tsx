@@ -36,8 +36,13 @@ const HNEnhancer = () => {
 
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message.type === "TRANSLATE_PAGE") {
+        shouldStop = false
         sendResponse({ success: true })
         translateCurrentPage()
+      }
+      if (message.type === "STOP_TRANSLATION") {
+        shouldStop = true
+        sendResponse({ success: true })
       }
       if (message.type === "TOGGLE_TRANSLATIONS") {
         applyVisibility(message.show)
@@ -49,7 +54,7 @@ const HNEnhancer = () => {
   return null
 }
 
-// 向 popup 报告进度（fire-and-forget，popup 不一定开着）
+// 向 popup 报告进度
 function reportProgress(done: number, total: number) {
   chrome.runtime.sendMessage({ type: "TRANSLATION_PROGRESS", done, total }).catch(() => {})
 }
@@ -61,6 +66,13 @@ function reportComplete(total: number) {
 function reportError(message: string) {
   chrome.runtime.sendMessage({ type: "TRANSLATION_ERROR", message }).catch(() => {})
 }
+
+function reportStopped() {
+  chrome.runtime.sendMessage({ type: "TRANSLATION_STOPPED" }).catch(() => {})
+}
+
+// 翻译取消标志
+let shouldStop = false
 
 // 翻译当前页面
 async function translateCurrentPage() {
@@ -87,6 +99,7 @@ async function translateCurrentPage() {
   try {
     // 翻译标题
     for (const link of titleLinks) {
+      if (shouldStop) { reportStopped(); return }
       const titleElement = link as HTMLAnchorElement
       titleElement.setAttribute('data-hn-dual-translated', 'true')
 
@@ -129,6 +142,7 @@ async function translateCurrentPage() {
 
     // 翻译 Ask HN 帖子正文
     for (const topText of topTexts) {
+      if (shouldStop) { reportStopped(); return }
       const topTextElement = topText as HTMLElement
       topTextElement.setAttribute('data-hn-dual-translated', 'true')
 
@@ -166,6 +180,7 @@ async function translateCurrentPage() {
 
     // 翻译评论
     for (const comment of comments) {
+      if (shouldStop) { reportStopped(); return }
       const commentElement = comment as HTMLElement
       commentElement.setAttribute('data-hn-dual-translated', 'true')
 

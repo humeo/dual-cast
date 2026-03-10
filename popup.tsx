@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 
-type Status = "idle" | "translating" | "done" | "error"
+type Status = "idle" | "translating" | "done" | "stopped" | "error"
 
 function IndexPopup() {
   const [apiKey, setApiKey] = useState("")
@@ -26,6 +26,8 @@ function IndexPopup() {
       } else if (message.type === "TRANSLATION_COMPLETE") {
         setProgress({ done: message.total, total: message.total })
         setStatus("done")
+      } else if (message.type === "TRANSLATION_STOPPED") {
+        setStatus("stopped")
       } else if (message.type === "TRANSLATION_ERROR") {
         setErrorMsg(message.message)
         setStatus("error")
@@ -62,6 +64,13 @@ function IndexPopup() {
     } catch (error) {
       setErrorMsg("无法连接到页面，请刷新后重试")
       setStatus("error")
+    }
+  }
+
+  const handleStop = async () => {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
+    if (tabs[0]?.id) {
+      chrome.tabs.sendMessage(tabs[0].id, { type: "STOP_TRANSLATION" }).catch(() => {})
     }
   }
 
@@ -189,21 +198,21 @@ function IndexPopup() {
       {/* 翻译 + 显示/隐藏 并排 */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
         <button
-          onClick={handleTranslate}
-          disabled={isTranslating || !apiKey}
+          onClick={isTranslating ? handleStop : handleTranslate}
+          disabled={!isTranslating && !apiKey}
           style={{
             flex: 1,
             padding: "10px",
-            background: isTranslating ? "#999" : "#0066cc",
+            background: isTranslating ? "#e53935" : "#0066cc",
             color: "white",
             border: "none",
             borderRadius: "4px",
             fontSize: "14px",
             fontWeight: "500",
-            cursor: isTranslating || !apiKey ? "not-allowed" : "pointer",
+            cursor: !isTranslating && !apiKey ? "not-allowed" : "pointer",
             transition: "background 0.2s"
           }}>
-          {isTranslating ? "翻译中..." : "🌐 翻译当前页面"}
+          {isTranslating ? "⏹ 停止翻译" : "🌐 翻译当前页面"}
         </button>
 
         <button
@@ -260,6 +269,7 @@ function IndexPopup() {
             </>
           )}
           {status === "done" && <span>✓ 翻译完成，共 {progress.total} 条</span>}
+          {status === "stopped" && <span>⏹ 已停止，已翻译 {progress.done} / {progress.total} 条</span>}
           {status === "error" && <span>✗ {errorMsg || "翻译失败，请检查 API Key 配置"}</span>}
         </div>
       )}
@@ -292,6 +302,8 @@ function statusStyle(status: Status): React.CSSProperties {
       return { background: "#fff8f0", border: "1px solid #ff6600", color: "#333" }
     case "done":
       return { background: "#f0fff4", border: "1px solid #4caf50", color: "#2e7d32" }
+    case "stopped":
+      return { background: "#f5f5f5", border: "1px solid #999", color: "#555" }
     case "error":
       return { background: "#fff0f0", border: "1px solid #e53935", color: "#c62828" }
     default:

@@ -66,6 +66,13 @@ function detectArticle() {
   }
 }
 
+function reportStopped() {
+  chrome.runtime.sendMessage({ type: "TRANSLATION_STOPPED" }).catch(() => {})
+}
+
+// 翻译取消标志
+let shouldStop = false
+
 // 翻译文章，段落双语对照，样式继承原页面
 async function translatePage() {
   const article = detectArticle()
@@ -111,6 +118,7 @@ async function translatePage() {
 
   // 翻译段落
   for (const paragraph of article.paragraphs) {
+    if (shouldStop) { reportStopped(); return }
     if (paragraph.querySelector(".hn-dual-translation")) continue
 
     const text = paragraph.textContent?.trim() || ""
@@ -158,8 +166,13 @@ const UniversalTranslator = () => {
         applyVisibility(message.show)
       }
       if (message.type === "TRANSLATE_PAGE") {
+        shouldStop = false
         sendResponse({ success: true })
         translatePage()
+      }
+      if (message.type === "STOP_TRANSLATION") {
+        shouldStop = true
+        sendResponse({ success: true })
       }
       return true
     })
