@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 
-type Status = "idle" | "translating" | "done" | "error" | "wrong-page"
+type Status = "idle" | "translating" | "done" | "error"
 
 function IndexPopup() {
   const [apiKey, setApiKey] = useState("")
@@ -54,11 +54,6 @@ function IndexPopup() {
     if (!currentTab?.id) {
       setErrorMsg("无法获取当前标签页")
       setStatus("error")
-      return
-    }
-
-    if (!currentTab.url?.includes("news.ycombinator.com")) {
-      setStatus("wrong-page")
       return
     }
 
@@ -266,7 +261,6 @@ function IndexPopup() {
           )}
           {status === "done" && <span>✓ 翻译完成，共 {progress.total} 条</span>}
           {status === "error" && <span>✗ {errorMsg || "翻译失败，请检查 API Key 配置"}</span>}
-          {status === "wrong-page" && <span>请在 Hacker News 页面使用此功能</span>}
         </div>
       )}
 
@@ -299,7 +293,6 @@ function statusStyle(status: Status): React.CSSProperties {
     case "done":
       return { background: "#f0fff4", border: "1px solid #4caf50", color: "#2e7d32" }
     case "error":
-    case "wrong-page":
       return { background: "#fff0f0", border: "1px solid #e53935", color: "#c62828" }
     default:
       return {}
