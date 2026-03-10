@@ -47,6 +47,17 @@ const HNEnhancer = () => {
       if (message.type === "TOGGLE_TRANSLATIONS") {
         applyVisibility(message.show)
       }
+      if (message.type === "GET_ARTICLE_TEXT") {
+        const titleEls = Array.from(document.querySelectorAll('.titleline > a'))
+        const titles = titleEls.map((el) => el.textContent?.trim()).filter(Boolean).join('\n')
+        const toptext = document.querySelector('.toptext')?.textContent?.trim() || ''
+        const comments = Array.from(document.querySelectorAll('.commtext'))
+          .map((el) => el.textContent?.trim())
+          .filter((t) => t && t.length > 20)
+          .join('\n\n')
+        const text = [titles, toptext, comments].filter(Boolean).join('\n\n').slice(0, 8000)
+        sendResponse({ title: document.title, text })
+      }
       return true
     })
   }, [])

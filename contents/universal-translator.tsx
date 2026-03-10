@@ -174,6 +174,13 @@ const UniversalTranslator = () => {
         shouldStop = true
         sendResponse({ success: true })
       }
+      if (message.type === "GET_ARTICLE_TEXT") {
+        const documentClone = document.cloneNode(true) as Document
+        const reader = new Readability(documentClone)
+        const article = reader.parse()
+        const text = (article?.textContent || '').slice(0, 8000)
+        sendResponse({ title: article?.title || document.title, text })
+      }
       return true
     })
   }, [])

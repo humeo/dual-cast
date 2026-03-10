@@ -3,6 +3,7 @@
 interface TranslationRequest {
   type: string
   text: string
+  title?: string
   targetLang: string
 }
 const hnOriginatedTabs = new Set<number>()
@@ -97,6 +98,25 @@ chrome.runtime.onMessage.addListener((request: TranslationRequest, sender, sendR
   if (request.type === "CHECK_HN_REFERRER") {
     const tabId = sender.tab?.id
     sendResponse({ isFromHN: tabId ? hnOriginatedTabs.has(tabId) : false })
+    return true
+  }
+
+  if (request.type === "SUMMARIZE") {
+    chrome.storage.local.get(["apiKey", "apiProvider", "openaiKeyForSummary"], async (settings) => {
+      // 优先用专用 openai key，否则用主 key（仅 openai provider 时）
+      const key = settings.openaiKeyForSummary ||
+        (settings.apiProvider === "openai" ? settings.apiKey : null)
+      if (!key) {
+        sendResponse({ error: "总结功能需要 OpenAI API Key" })
+        return
+      }
+      try {
+        const summary = await summarizeWithOpenAI(request.text, request.title, key)
+        sendResponse({ summary })
+      } catch (e) {
+        sendResponse({ error: (e as Error).message })
+      }
+    })
     return true
   }
 
@@ -199,6 +219,40 @@ async function translateBatchWithDeepL(texts: string[], targetLang: string, apiK
   }
 
   return data.translations.map((t: { text: string }) => t.text)
+}
+
+// AI 摘要
+async function summarizeWithOpenAI(text: string, title: string, apiKey: string): Promise<string> {
+  const truncated = text.slice(0, 8000)
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "你是专业的文章摘要助手。请用中文提炼核心要点，使用「• 」开头的要点列表，简洁明了，控制在5条以内，每条不超过50字。只输出要点，不要有标题或前言。"
+        },
+        {
+          role: "user",
+          content: `标题：${title}\n\n${truncated}`
+        }
+      ],
+      temperature: 0.3
+    })
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(`OpenAI API 错误: ${error.error?.message || response.statusText}`)
+  }
+
+  const data = await response.json()
+  return data.choices[0].message.content.trim()
 }
 
 export {}
