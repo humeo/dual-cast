@@ -10,8 +10,8 @@
   <a href="#installation"><img src="https://img.shields.io/badge/Chrome-Extension-4338ca?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Chrome Extension"/></a>
   <img src="https://img.shields.io/badge/TypeScript-React-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/DeepL-Powered-0F2B46?style=for-the-badge&logo=deepl&logoColor=white" alt="DeepL"/>
-  <img src="https://img.shields.io/badge/OpenAI-GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white" alt="OpenAI"/>
-  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="MIT License"/>
+  <img src="https://img.shields.io/badge/OpenAI-GPT--5.2-412991?style=for-the-badge&logo=openai&logoColor=white" alt="OpenAI"/>
+  <img src="https://img.shields.io/badge/License-Apache_2.0-blue?style=for-the-badge" alt="Apache 2.0 License"/>
 </p>
 
 
@@ -43,7 +43,7 @@ Whether you're reading Hacker News, tech blogs, research papers, or news sites, 
 ### AI Article Summary
 
 - **Instant summaries** — get the key points of any article in seconds
-- **Powered by OpenAI** — uses GPT-4o-mini for fast, accurate summaries
+- **Powered by OpenAI** — uses GPT-5.2 for fast, accurate summaries
 - **Summary history** — all summaries are saved and searchable
 - **Works on any article** — blogs, news, documentation, research papers
 
@@ -179,7 +179,7 @@ User clicks "Translate"
 | ------------------ | ----------------------------------------------------------------------- |
 | Framework          | [Plasmo](https://docs.plasmo.com/) — modern browser extension framework |
 | Language           | TypeScript + React                                                      |
-| Translation        | DeepL API, OpenAI API (GPT-4o-mini)                                     |
+| Translation        | DeepL API, OpenAI API (GPT-5.2)                                        |
 | Article Extraction | [@mozilla/readability](https://github.com/nicola/readability)           |
 | Package Manager    | [Bun](https://bun.sh)                                                   |
 
@@ -201,7 +201,7 @@ bun run dev        # Start dev mode with hot reload
 
 ## License
 
-[MIT](LICENSE) — use it freely, modify it, share it.
+[Apache 2.0](LICENSE) — free to use, modify, and distribute with attribution.
 
 ---
 
