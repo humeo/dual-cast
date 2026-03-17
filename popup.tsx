@@ -256,8 +256,13 @@ function IndexPopup() {
       summary: response.summary,
       timestamp: Date.now()
     }
+    // 用 URL 去重（忽略 hash 和 query，只比较 origin+pathname）
+    const urlKey = (u: string) => { try { const p = new URL(u); return p.origin + p.pathname } catch { return u } }
+    const newKey = urlKey(newItem.url)
     chrome.storage.local.get(["summaryHistory"], (stored) => {
-      const updated = [newItem, ...(stored.summaryHistory || [])].slice(0, 100)
+      const existing: HistoryItem[] = stored.summaryHistory || []
+      const deduped = existing.filter((item) => urlKey(item.url) !== newKey)
+      const updated = [newItem, ...deduped].slice(0, 100)
       chrome.storage.local.set({ summaryHistory: updated })
       setHistory(updated)
     })
