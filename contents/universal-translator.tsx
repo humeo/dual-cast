@@ -122,7 +122,7 @@ async function translateParagraph(paragraph: HTMLElement) {
     if (response.translation) {
       const div = document.createElement("div")
       div.className = "hn-dual-translation"
-      div.style.cssText = "display:block;margin-top:0.4em;opacity:0.7;"
+      div.style.cssText = "display:block;margin-top:0.15em;margin-bottom:0.6em;opacity:0.7;"
       div.textContent = response.translation
       paragraph.after(div)
     }
@@ -161,7 +161,7 @@ async function translatePage() {
       if (response.translation) {
         const div = document.createElement("div")
         div.className = "hn-dual-translation"
-        div.style.cssText = "font-size:0.75em;font-weight:normal;color:inherit;opacity:0.65;margin-top:6px;"
+        div.style.cssText = "font-size:0.75em;font-weight:normal;color:inherit;opacity:0.65;margin-top:2px;margin-bottom:8px;"
         div.textContent = response.translation
         titleElement.appendChild(div)
       }

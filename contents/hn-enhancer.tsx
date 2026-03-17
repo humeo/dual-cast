@@ -106,7 +106,7 @@ async function translateElement(el: HTMLElement, type: "title" | "toptext" | "co
     const div = document.createElement("div")
     if (type === "title") {
       div.className = "hn-dual-translation"
-      div.style.cssText = "color:#666;font-size:0.9em;margin-top:4px;line-height:1.4;padding:4px 0;"
+      div.style.cssText = "color:#666;font-size:0.9em;margin-top:1px;margin-bottom:6px;line-height:1.4;padding:0;"
       div.textContent = response.translation
       const titleRow = el.closest(".athing")
       if (titleRow?.nextElementSibling) {
@@ -115,12 +115,12 @@ async function translateElement(el: HTMLElement, type: "title" | "toptext" | "co
       }
     } else if (type === "toptext") {
       div.className = "hn-dual-toptext-translation"
-      div.style.cssText = "background:#f6f6ef;padding:8px;margin-top:8px;border-left:2px solid #ff6600;color:#333;font-size:0.95em;line-height:1.5;"
+      div.style.cssText = "background:#f6f6ef;padding:6px 8px 8px;margin-top:2px;margin-bottom:8px;border-left:2px solid #ff6600;color:#333;font-size:0.95em;line-height:1.5;"
       div.textContent = response.translation
       el.after(div)
     } else {
       div.className = "hn-dual-comment-translation"
-      div.style.cssText = "background:#f6f6ef;padding:8px;margin-top:8px;border-left:2px solid #ff6600;color:#333;font-size:0.95em;line-height:1.5;"
+      div.style.cssText = "background:#f6f6ef;padding:6px 8px 8px;margin-top:2px;margin-bottom:8px;border-left:2px solid #ff6600;color:#333;font-size:0.95em;line-height:1.5;"
       div.textContent = response.translation
       el.appendChild(div)
     }
