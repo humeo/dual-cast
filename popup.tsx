@@ -1054,7 +1054,7 @@ function IndexPopup() {
                   )}
                   {usageStats.openaiChars > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px" }}>
-                      <span style={{ color: C.textSec }}>OpenAI (gpt-4o-mini)</span>
+                      <span style={{ color: C.textSec }}>OpenAI ({apiModel || "gpt-4o-mini"})</span>
                       <span style={{ fontWeight: "600", color: C.text }}>
                         ~${(usageStats.openaiChars / 4 / 1_000_000 * 0.15 + usageStats.openaiChars / 4 / 1_000_000 * 0.6).toFixed(4)}
                       </span>
