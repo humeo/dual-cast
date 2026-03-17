@@ -180,6 +180,11 @@ chrome.runtime.onMessage.addListener((request: TranslationRequest, sender, sendR
     return true
   }
 
+  if (request.type === "GET_TAB_ID") {
+    sendResponse({ tabId: sender.tab?.id })
+    return true
+  }
+
   if (request.type === "GET_USAGE_STATS") {
     sendResponse({ stats: currentSessionStats })
     return true

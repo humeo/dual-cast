@@ -132,13 +132,14 @@ function IndexPopup() {
         setShowTranslations(result.showTranslations !== false)
         setHistory(result.summaryHistory || [])
         if (!result.apiKey) setSettingsOpen(true)
-        // 恢复翻译状态
-        if (result.translationState) {
-          const s = result.translationState
-          setProgress({ done: s.done, total: s.total })
-          if (s.status === "translating") setTransStatus("translating")
-          else if (s.status === "done") setTransStatus("done")
-          else if (s.status === "stopped") setTransStatus("stopped")
+        // 恢复翻译状态（只恢复当前 tab 的状态）
+        if (result.translationState && result.translationState.status === "translating") {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]?.id === result.translationState.tabId) {
+              setProgress({ done: result.translationState.done, total: result.translationState.total })
+              setTransStatus("translating")
+            }
+          })
         }
       }
     )

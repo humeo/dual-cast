@@ -67,17 +67,19 @@ const HNEnhancer = () => {
 
 // 向 popup 报告进度，同时持久化到 storage 供 popup 重新打开时恢复
 function reportProgress(done: number, total: number) {
-  chrome.storage.local.set({ translationState: { status: "translating", done, total } })
+  chrome.runtime.sendMessage({ type: "GET_TAB_ID" }).then((res) => {
+    chrome.storage.local.set({ translationState: { status: "translating", done, total, tabId: res?.tabId } })
+  }).catch(() => {})
   chrome.runtime.sendMessage({ type: "TRANSLATION_PROGRESS", done, total }).catch(() => {})
 }
 
 function reportComplete(total: number) {
-  chrome.storage.local.set({ translationState: { status: "done", done: total, total } })
+  chrome.storage.local.remove("translationState")
   chrome.runtime.sendMessage({ type: "TRANSLATION_COMPLETE", total }).catch(() => {})
 }
 
-function reportStopped(done: number, total: number) {
-  chrome.storage.local.set({ translationState: { status: "stopped", done, total } })
+function reportStopped(_done: number, _total: number) {
+  chrome.storage.local.remove("translationState")
   chrome.runtime.sendMessage({ type: "TRANSLATION_STOPPED" }).catch(() => {})
 }
 
