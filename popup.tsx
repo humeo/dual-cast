@@ -100,6 +100,7 @@ function IndexPopup() {
   const [openaiKeyForSummary, setOpenaiKeyForSummary] = useState("")
   const [apiBaseUrl, setApiBaseUrl] = useState("")
   const [apiModel, setApiModel] = useState("")
+  const [openAIBatchSize, setOpenAIBatchSize] = useState(10)
   const [targetLang, setTargetLang] = useState("zh")
   const [saved, setSaved] = useState(false)
   const [showTranslations, setShowTranslations] = useState(true)
@@ -120,13 +121,14 @@ function IndexPopup() {
 
   useEffect(() => {
     chrome.storage.local.get(
-      ["apiKey", "apiProvider", "openaiKeyForSummary", "apiBaseUrl", "apiModel", "showTranslations", "summaryHistory"],
+      ["apiKey", "apiProvider", "openaiKeyForSummary", "apiBaseUrl", "apiModel", "openAIBatchSize", "showTranslations", "summaryHistory"],
       (result) => {
         if (result.apiKey) setApiKey(result.apiKey)
         if (result.apiProvider) setApiProvider(result.apiProvider)
         if (result.openaiKeyForSummary) setOpenaiKeyForSummary(result.openaiKeyForSummary)
         if (result.apiBaseUrl) setApiBaseUrl(result.apiBaseUrl)
         if (result.apiModel) setApiModel(result.apiModel)
+        if (result.openAIBatchSize) setOpenAIBatchSize(result.openAIBatchSize)
         setShowTranslations(result.showTranslations !== false)
         setHistory(result.summaryHistory || [])
         if (!result.apiKey) setSettingsOpen(true)
@@ -165,7 +167,7 @@ function IndexPopup() {
   }, [activeTab])
 
   const handleSave = () => {
-    chrome.storage.local.set({ apiKey, apiProvider, openaiKeyForSummary, apiBaseUrl, apiModel }, () => {
+    chrome.storage.local.set({ apiKey, apiProvider, openaiKeyForSummary, apiBaseUrl, apiModel, openAIBatchSize }, () => {
       chrome.storage.sync.set({ targetLang }, () => {
         setSaved(true)
         setTimeout(() => { setSaved(false); setSettingsOpen(false) }, 1200)
@@ -491,6 +493,17 @@ function IndexPopup() {
                 value={apiModel}
                 onChange={(e) => setApiModel(e.target.value)}
                 placeholder="gpt-4o-mini"
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Batch Size</label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={openAIBatchSize}
+                onChange={(e) => setOpenAIBatchSize(Math.max(1, Math.min(50, parseInt(e.target.value) || 10)))}
                 style={inputStyle}
               />
             </div>

@@ -103,17 +103,29 @@ async function flushQueue() {
   const baseUrl = (settings.apiBaseUrl || "https://api.openai.com").replace(/\/$/, "")
   const model = settings.apiModel || "gpt-4o-mini"
 
-  // OpenAI 不支持批量，逐条发送
+  // OpenAI 批量翻译（将多条文本合并成一个请求）
   if (provider === "openai") {
-    for (const item of batch) {
-      try {
-        const translation = await translateWithOpenAI(item.text, item.targetLang, settings.apiKey, baseUrl, model)
-        translationCache.set(`${item.text}:${item.targetLang}`, translation)
-        recordUsage("openai", item.text.length)
-        item.resolve(translation)
-      } catch (e) {
-        item.reject(e as Error)
+    try {
+      const targetLang = batch[0].targetLang
+      const batchSize = settings.openAIBatchSize || 10
+      // 分组处理（每组 batchSize 条）
+      for (let i = 0; i < batch.length; i += batchSize) {
+        const group = batch.slice(i, i + batchSize)
+        const groupTexts = group.map((item) => item.text)
+        try {
+          const translations = await translateBatchWithOpenAI(groupTexts, targetLang, settings.apiKey, baseUrl, model)
+          const totalChars = groupTexts.reduce((sum, t) => sum + t.length, 0)
+          recordUsage("openai", totalChars)
+          group.forEach((item, j) => {
+            translationCache.set(`${item.text}:${item.targetLang}`, translations[j])
+            item.resolve(translations[j])
+          })
+        } catch (e) {
+          group.forEach((item) => item.reject(e as Error))
+        }
       }
+    } catch (e) {
+      batch.forEach((item) => item.reject(e as Error))
     }
     return
   }
@@ -213,8 +225,8 @@ async function handleTranslation(text: string, targetLang: string): Promise<stri
   })
 }
 
-// OpenAI 翻译
-async function translateWithOpenAI(text: string, targetLang: string, apiKey: string, baseUrl: string, model: string): Promise<string> {
+// OpenAI 批量翻译（多条文本合并成一个请求，用编号分隔）
+async function translateBatchWithOpenAI(texts: string[], targetLang: string, apiKey: string, baseUrl: string, model: string): Promise<string[]> {
   const langNames: Record<string, string> = {
     zh: "Chinese", en: "English", ja: "Japanese", ko: "Korean",
     de: "German", fr: "French", es: "Spanish", it: "Italian",
@@ -223,23 +235,19 @@ async function translateWithOpenAI(text: string, targetLang: string, apiKey: str
   }
   const targetLanguage = langNames[targetLang] || "Chinese"
 
+  const numbered = texts.map((t, i) => `[${i + 1}] ${t}`).join("\n")
+
   const response = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
       messages: [
         {
           role: "system",
-          content: `You are a professional technical translator. Detect the language of the input text. If it is already in ${targetLanguage}, return it unchanged. Otherwise, translate it to ${targetLanguage} accurately and naturally. Return only the result, no explanations.`
+          content: `You are a professional technical translator. Translate each numbered item to ${targetLanguage}. If an item is already in ${targetLanguage}, return it unchanged. Return ONLY the numbered translations in the same format, one per line, e.g. "[1] translation". No extra text.`
         },
-        {
-          role: "user",
-          content: text
-        }
+        { role: "user", content: numbered }
       ],
       temperature: 0.3
     })
@@ -251,7 +259,20 @@ async function translateWithOpenAI(text: string, targetLang: string, apiKey: str
   }
 
   const data = await response.json()
-  return data.choices[0].message.content.trim()
+  const raw = data.choices[0].message.content.trim()
+
+  // 解析 "[N] translation" 格式
+  const results: string[] = new Array(texts.length)
+  const lines = raw.split("\n")
+  for (const line of lines) {
+    const m = line.match(/^\[(\d+)\]\s*(.+)$/)
+    if (m) {
+      const idx = parseInt(m[1]) - 1
+      if (idx >= 0 && idx < texts.length) results[idx] = m[2].trim()
+    }
+  }
+  // 解析失败的条目回退到原文
+  return results.map((t, i) => t || texts[i])
 }
 
 // DeepL 批量翻译（一次请求多个文本）
