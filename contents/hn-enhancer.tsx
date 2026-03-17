@@ -146,6 +146,14 @@ async function translateCurrentPage() {
 
   lazyTotal = titleLinks.length + topTexts.length + comments.length
   lazyDone = 0
+
+  console.log(`[HN Dual] Found ${titleLinks.length} titles, ${topTexts.length} topTexts, ${comments.length} comments (total: ${lazyTotal})`)
+
+  if (lazyTotal === 0) {
+    reportComplete(0)
+    return
+  }
+
   reportProgress(0, lazyTotal)
 
   // 清理旧 observer
@@ -158,6 +166,7 @@ async function translateCurrentPage() {
       const el = entry.target as HTMLElement
       lazyObserver?.unobserve(el)
       const type = el.dataset.hnDualType as "title" | "toptext" | "comment"
+      console.log(`[HN Dual] Translating ${type}: "${(el.textContent || "").slice(0, 40)}..."`)
       translateElement(el, type)
     }
   }, { rootMargin: "200px 0px" })
