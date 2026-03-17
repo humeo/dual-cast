@@ -192,12 +192,21 @@ function IndexPopup() {
     chrome.storage.local.remove("translationState")
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
     if (!tabs[0]?.id) { setTransError("无法获取当前标签页"); setTransStatus("error"); return }
-    try {
-      await chrome.tabs.sendMessage(tabs[0].id, { type: "TRANSLATE_PAGE" })
-    } catch {
-      setTransError("无法连接到页面，请刷新后重试")
-      setTransStatus("error")
+    const sendWithRetry = async (tabId: number) => {
+      try {
+        await chrome.tabs.sendMessage(tabId, { type: "TRANSLATE_PAGE" })
+      } catch {
+        // SPA 页面 content script 可能还没注册，等 800ms 重试一次
+        await new Promise(r => setTimeout(r, 800))
+        try {
+          await chrome.tabs.sendMessage(tabId, { type: "TRANSLATE_PAGE" })
+        } catch {
+          setTransError("无法连接到页面，请刷新后重试")
+          setTransStatus("error")
+        }
+      }
     }
+    await sendWithRetry(tabs[0].id)
   }
 
   const handleStop = async () => {

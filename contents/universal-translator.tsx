@@ -45,8 +45,8 @@ function detectArticle() {
 
   // 社交平台专用选择器
   const SOCIAL_SELECTORS: Record<string, string> = {
-    "twitter.com": '[data-testid="tweetText"], article [lang]',
-    "x.com": '[data-testid="tweetText"], article [lang]',
+    "twitter.com": '[data-testid="tweetText"], [data-testid="tweet"] [lang], article [lang], [role="article"] [lang]',
+    "x.com": '[data-testid="tweetText"], [data-testid="tweet"] [lang], article [lang], [role="article"] [lang]',
     "reddit.com": '[slot="text-body"] p, .RichTextJSON-root p, [data-click-id="text"] p, .md p, shreddit-comment [slot="comment"] p',
     "facebook.com": '[data-ad-preview="message"] div, [dir="auto"][style]',
     "linkedin.com": '.feed-shared-update-v2__description-wrapper span[dir="ltr"], .update-components-text span[dir="ltr"]',
@@ -137,7 +137,12 @@ async function translateParagraph(paragraph: HTMLElement) {
 
 // 翻译文章，段落双语对照，样式继承原页面（惰性模式）
 async function translatePage() {
-  const article = detectArticle()
+  let article = detectArticle()
+  // SPA 页面内容可能还没渲染，等 800ms 重试一次
+  if (!article) {
+    await new Promise(r => setTimeout(r, 800))
+    article = detectArticle()
+  }
   if (!article) {
     reportError("未检测到文章内容")
     return
