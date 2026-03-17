@@ -121,7 +121,7 @@ function IndexPopup() {
 
   useEffect(() => {
     chrome.storage.local.get(
-      ["apiKey", "apiProvider", "openaiKeyForSummary", "apiBaseUrl", "apiModel", "openAIBatchSize", "showTranslations", "summaryHistory"],
+      ["apiKey", "apiProvider", "openaiKeyForSummary", "apiBaseUrl", "apiModel", "openAIBatchSize", "showTranslations", "summaryHistory", "translationState"],
       (result) => {
         if (result.apiKey) setApiKey(result.apiKey)
         if (result.apiProvider) setApiProvider(result.apiProvider)
@@ -132,6 +132,14 @@ function IndexPopup() {
         setShowTranslations(result.showTranslations !== false)
         setHistory(result.summaryHistory || [])
         if (!result.apiKey) setSettingsOpen(true)
+        // 恢复翻译状态
+        if (result.translationState) {
+          const s = result.translationState
+          setProgress({ done: s.done, total: s.total })
+          if (s.status === "translating") setTransStatus("translating")
+          else if (s.status === "done") setTransStatus("done")
+          else if (s.status === "stopped") setTransStatus("stopped")
+        }
       }
     )
     chrome.storage.sync.get(["targetLang"], (result) => {
@@ -180,6 +188,7 @@ function IndexPopup() {
     setProgress({ done: 0, total: 0 })
     setTransError("")
     setSummaryStatus("idle")
+    chrome.storage.local.remove("translationState")
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
     if (!tabs[0]?.id) { setTransError("无法获取当前标签页"); setTransStatus("error"); return }
     try {

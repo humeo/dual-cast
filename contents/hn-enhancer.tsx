@@ -65,13 +65,20 @@ const HNEnhancer = () => {
   return null
 }
 
-// 向 popup 报告进度
+// 向 popup 报告进度，同时持久化到 storage 供 popup 重新打开时恢复
 function reportProgress(done: number, total: number) {
+  chrome.storage.local.set({ translationState: { status: "translating", done, total } })
   chrome.runtime.sendMessage({ type: "TRANSLATION_PROGRESS", done, total }).catch(() => {})
 }
 
 function reportComplete(total: number) {
+  chrome.storage.local.set({ translationState: { status: "done", done: total, total } })
   chrome.runtime.sendMessage({ type: "TRANSLATION_COMPLETE", total }).catch(() => {})
+}
+
+function reportStopped(done: number, total: number) {
+  chrome.storage.local.set({ translationState: { status: "stopped", done, total } })
+  chrome.runtime.sendMessage({ type: "TRANSLATION_STOPPED" }).catch(() => {})
 }
 
 // 翻译取消标志
@@ -162,7 +169,12 @@ async function translateCurrentPage() {
   // rootMargin: 提前 200px 开始翻译（视口下方 200px 的内容也会被翻译）
   lazyObserver = new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      if (!entry.isIntersecting || shouldStop) continue
+      if (!entry.isIntersecting) continue
+      if (shouldStop) {
+        lazyObserver?.unobserve(entry.target)
+        reportStopped(lazyDone, lazyTotal)
+        continue
+      }
       const el = entry.target as HTMLElement
       lazyObserver?.unobserve(el)
       const type = el.dataset.hnDualType as "title" | "toptext" | "comment"
