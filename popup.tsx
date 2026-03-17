@@ -2,13 +2,21 @@ import { useEffect, useRef, useState } from "react"
 
 type TransStatus = "idle" | "translating" | "done" | "stopped" | "error"
 type SummaryStatus = "idle" | "summarizing" | "done" | "error"
-type Tab = "translate" | "history"
+type Tab = "translate" | "history" | "usage"
 
 interface HistoryItem {
   url: string
   title: string
   summary: string
   timestamp: number
+}
+
+interface UsageStats {
+  totalChars: number
+  totalRequests: number
+  deeplChars: number
+  openaiChars: number
+  lastReset: number
 }
 
 function formatTime(ts: number): string {
@@ -106,6 +114,7 @@ function IndexPopup() {
 
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
+  const [usageStats, setUsageStats] = useState<UsageStats | null>(null)
 
   const listenerRef = useRef<(msg: any) => void>()
 
@@ -145,6 +154,15 @@ function IndexPopup() {
     chrome.runtime.onMessage.addListener(listener)
     return () => chrome.runtime.onMessage.removeListener(listener)
   }, [])
+
+  // 切换到 usage tab 时刷新统计
+  useEffect(() => {
+    if (activeTab === "usage") {
+      chrome.runtime.sendMessage({ type: "GET_USAGE_STATS" }).then((res) => {
+        if (res?.stats) setUsageStats(res.stats)
+      }).catch(() => {})
+    }
+  }, [activeTab])
 
   const handleSave = () => {
     chrome.storage.local.set({ apiKey, apiProvider, openaiKeyForSummary, apiBaseUrl, apiModel }, () => {
@@ -278,6 +296,12 @@ function IndexPopup() {
     }
     reader.readAsText(file)
     e.target.value = ""
+  }
+
+  const handleResetUsage = () => {
+    chrome.runtime.sendMessage({ type: "RESET_USAGE_STATS" }).then(() => {
+      setUsageStats({ totalChars: 0, totalRequests: 0, deeplChars: 0, openaiChars: 0, lastReset: Date.now() })
+    }).catch(() => {})
   }
 
   const isTranslating = transStatus === "translating"
@@ -509,6 +533,11 @@ function IndexPopup() {
           { key: "history" as Tab, label: history.length > 0 ? `History (${history.length})` : "History", icon: (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          )},
+          { key: "usage" as Tab, label: "Usage", icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>
             </svg>
           )},
         ]).map(({ key, label, icon }) => (
@@ -924,6 +953,88 @@ function IndexPopup() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Usage Tab ── */}
+      {activeTab === "usage" && (
+        <div style={{ padding: "16px 18px 20px" }}>
+          {!usageStats ? (
+            <div style={{ textAlign: "center", padding: "40px 0", color: C.textMuted, fontSize: "13px" }}>Loading...</div>
+          ) : (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <span style={{ fontSize: "11px", color: C.textMuted, fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Today's Usage
+                </span>
+                <button
+                  onClick={handleResetUsage}
+                  style={{
+                    padding: "5px 10px", background: "none", border: `1px solid ${C.border}`,
+                    borderRadius: "8px", fontSize: "11px", color: C.textMuted, cursor: "pointer",
+                    fontFamily: "inherit", transition: "all 0.15s",
+                  }}>
+                  Reset
+                </button>
+              </div>
+
+              {/* Stats cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+                {[
+                  { label: "Characters", value: usageStats.totalChars.toLocaleString(), color: C.primary },
+                  { label: "Requests", value: usageStats.totalRequests.toLocaleString(), color: C.accent },
+                  { label: "DeepL Chars", value: usageStats.deeplChars.toLocaleString(), color: "#0ea5e9" },
+                  { label: "OpenAI Chars", value: usageStats.openaiChars.toLocaleString(), color: "#10b981" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} style={{
+                    background: C.card, border: `1px solid ${C.border}`, borderRadius: "12px",
+                    padding: "14px", textAlign: "center",
+                  }}>
+                    <div style={{ fontSize: "20px", fontWeight: "700", color, letterSpacing: "-0.5px" }}>{value}</div>
+                    <div style={{ fontSize: "10px", color: C.textMuted, fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "4px" }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Estimated cost */}
+              <div style={{
+                background: C.card, border: `1px solid ${C.border}`, borderRadius: "12px",
+                padding: "14px",
+              }}>
+                <div style={{ fontSize: "11px", color: C.textMuted, fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>
+                  Estimated Cost
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {usageStats.deeplChars > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px" }}>
+                      <span style={{ color: C.textSec }}>DeepL (Free: 500K/mo)</span>
+                      <span style={{ fontWeight: "600", color: C.text }}>
+                        ${(usageStats.deeplChars / 1_000_000 * 20).toFixed(4)}
+                        <span style={{ color: C.textMuted, fontWeight: "400" }}> / Pro $20/M</span>
+                      </span>
+                    </div>
+                  )}
+                  {usageStats.openaiChars > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px" }}>
+                      <span style={{ color: C.textSec }}>OpenAI (gpt-4o-mini)</span>
+                      <span style={{ fontWeight: "600", color: C.text }}>
+                        ~${(usageStats.openaiChars / 4 / 1_000_000 * 0.15 + usageStats.openaiChars / 4 / 1_000_000 * 0.6).toFixed(4)}
+                      </span>
+                    </div>
+                  )}
+                  {usageStats.totalChars === 0 && (
+                    <div style={{ fontSize: "12.5px", color: C.textMuted, textAlign: "center", padding: "8px 0" }}>
+                      No usage yet today
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <p style={{ margin: "12px 0 0", fontSize: "11px", color: C.textMuted, lineHeight: "1.6", textAlign: "center" }}>
+                Lazy translation is enabled — only visible content is translated to save API usage.
+              </p>
+            </>
           )}
         </div>
       )}

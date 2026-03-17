@@ -27,6 +27,48 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // 翻译缓存
 const translationCache = new Map<string, string>()
 
+// 消耗量统计
+interface UsageStats {
+  totalChars: number
+  totalRequests: number
+  deeplChars: number
+  openaiChars: number
+  lastReset: number
+}
+
+let currentSessionStats: UsageStats = {
+  totalChars: 0,
+  totalRequests: 0,
+  deeplChars: 0,
+  openaiChars: 0,
+  lastReset: Date.now()
+}
+
+// 从 storage 加载历史统计
+chrome.storage.local.get(["usageStats"], (result) => {
+  if (result.usageStats) {
+    const stored = result.usageStats as UsageStats
+    // 如果是今天的数据，继续累加；否则重置
+    const today = new Date().toDateString()
+    const lastResetDate = new Date(stored.lastReset).toDateString()
+    if (today === lastResetDate) {
+      currentSessionStats = stored
+    }
+  }
+})
+
+function recordUsage(provider: string, charCount: number) {
+  currentSessionStats.totalChars += charCount
+  currentSessionStats.totalRequests += 1
+  if (provider === "deepl") {
+    currentSessionStats.deeplChars += charCount
+  } else if (provider === "openai") {
+    currentSessionStats.openaiChars += charCount
+  }
+  // 持久化到 storage
+  chrome.storage.local.set({ usageStats: currentSessionStats })
+}
+
 // 批量请求队列
 interface QueueItem {
   text: string
@@ -67,6 +109,7 @@ async function flushQueue() {
       try {
         const translation = await translateWithOpenAI(item.text, item.targetLang, settings.apiKey, baseUrl, model)
         translationCache.set(`${item.text}:${item.targetLang}`, translation)
+        recordUsage("openai", item.text.length)
         item.resolve(translation)
       } catch (e) {
         item.reject(e as Error)
@@ -81,6 +124,8 @@ async function flushQueue() {
       const texts = batch.map((item) => item.text)
       const targetLang = batch[0].targetLang
       const translations = await translateBatchWithDeepL(texts, targetLang, settings.apiKey)
+      const totalChars = texts.reduce((sum, t) => sum + t.length, 0)
+      recordUsage("deepl", totalChars)
       batch.forEach((item, i) => {
         translationCache.set(`${item.text}:${item.targetLang}`, translations[i])
         item.resolve(translations[i])
@@ -120,6 +165,22 @@ chrome.runtime.onMessage.addListener((request: TranslationRequest, sender, sendR
         sendResponse({ error: (e as Error).message })
       }
     })
+    return true
+  }
+
+  if (request.type === "GET_USAGE_STATS") {
+    sendResponse({ stats: currentSessionStats })
+    return true
+  }
+
+  if (request.type === "RESET_USAGE_STATS") {
+    currentSessionStats = {
+      totalChars: 0, totalRequests: 0,
+      deeplChars: 0, openaiChars: 0,
+      lastReset: Date.now()
+    }
+    chrome.storage.local.set({ usageStats: currentSessionStats })
+    sendResponse({ success: true })
     return true
   }
 

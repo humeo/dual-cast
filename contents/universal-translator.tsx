@@ -39,16 +39,39 @@ function reportError(message: string) {
   chrome.runtime.sendMessage({ type: "TRANSLATION_ERROR", message }).catch(() => {})
 }
 
-// 检测文章内容
+// 检测文章内容（增强社交平台支持）
 function detectArticle() {
-  // 段落检测独立运行，不受 Readability 影响
-  const SELECTORS =
-    'article p, .post-content p, .entry-content p, .article-content p, ' +
-    '.content p, .story-body p, .article-body p, .td-post-content p, ' +
-    '.jeg_post_content p, main p, [role="main"] p, #content p, #main p'
+  const host = location.hostname
 
-  let paragraphs = Array.from(document.querySelectorAll(SELECTORS))
-    .filter((p) => (p.textContent?.trim() || "").length > 50) as HTMLElement[]
+  // 社交平台专用选择器
+  const SOCIAL_SELECTORS: Record<string, string> = {
+    "twitter.com": '[data-testid="tweetText"], article [lang]',
+    "x.com": '[data-testid="tweetText"], article [lang]',
+    "reddit.com": '[slot="text-body"] p, .RichTextJSON-root p, [data-click-id="text"] p, .md p, shreddit-comment [slot="comment"] p',
+    "facebook.com": '[data-ad-preview="message"] div, [dir="auto"][style]',
+    "linkedin.com": '.feed-shared-update-v2__description-wrapper span[dir="ltr"], .update-components-text span[dir="ltr"]',
+  }
+
+  // 匹配社交平台
+  const socialKey = Object.keys(SOCIAL_SELECTORS).find((k) => host.includes(k))
+
+  let paragraphs: HTMLElement[] = []
+
+  if (socialKey) {
+    paragraphs = Array.from(document.querySelectorAll(SOCIAL_SELECTORS[socialKey]))
+      .filter((el) => (el.textContent?.trim() || "").length > 10) as HTMLElement[]
+  }
+
+  // 通用文章选择器（社交平台没匹配到或结果为空时使用）
+  if (paragraphs.length === 0) {
+    const SELECTORS =
+      'article p, .post-content p, .entry-content p, .article-content p, ' +
+      '.content p, .story-body p, .article-body p, .td-post-content p, ' +
+      '.jeg_post_content p, main p, [role="main"] p, #content p, #main p'
+
+    paragraphs = Array.from(document.querySelectorAll(SELECTORS))
+      .filter((p) => (p.textContent?.trim() || "").length > 50) as HTMLElement[]
+  }
 
   // 兜底：页面上所有 <p>，过滤掉导航/页脚噪声
   if (paragraphs.length === 0) {
@@ -74,17 +97,45 @@ function detectArticle() {
     console.error("Readability error (using document.title):", error)
   }
 
-  return { title, paragraphs }
-}
-
-function reportStopped() {
-  chrome.runtime.sendMessage({ type: "TRANSLATION_STOPPED" }).catch(() => {})
+  return { title, paragraphs, isSocial: !!socialKey }
 }
 
 // 翻译取消标志
 let shouldStop = false
 
-// 翻译文章，段落双语对照，样式继承原页面
+// 惰性翻译：用 IntersectionObserver 只翻译进入视口的内容
+let lazyObserver: IntersectionObserver | null = null
+let lazyTargetLang = "zh"
+let lazyTotal = 0
+let lazyDone = 0
+
+async function translateParagraph(paragraph: HTMLElement) {
+  if (shouldStop || paragraph.querySelector(".hn-dual-translation")) return
+
+  const text = paragraph.textContent?.trim() || ""
+  if (text.length < 20) return
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "TRANSLATE", text, targetLang: lazyTargetLang
+    })
+    if (response.translation) {
+      const div = document.createElement("div")
+      div.className = "hn-dual-translation"
+      div.style.cssText = "display:block;margin-top:0.4em;opacity:0.7;"
+      div.textContent = response.translation
+      paragraph.after(div)
+    }
+  } catch (error) {
+    console.error("Paragraph translation error:", error)
+  }
+
+  lazyDone++
+  reportProgress(lazyDone, lazyTotal)
+  if (lazyDone >= lazyTotal) reportComplete(lazyTotal)
+}
+
+// 翻译文章，段落双语对照，样式继承原页面（惰性模式）
 async function translatePage() {
   const article = detectArticle()
   if (!article) {
@@ -93,78 +144,50 @@ async function translatePage() {
   }
 
   const settings = await chrome.storage.sync.get(["targetLang"])
-  const targetLang = settings.targetLang || "zh"
+  lazyTargetLang = settings.targetLang || "zh"
 
-  const total =
-    (article.paragraphs.length > 0 ? 1 : 0) + // 标题
-    article.paragraphs.filter((p) => !p.querySelector(".hn-dual-translation")).length
-  let done = 0
-  reportProgress(done, total)
+  const untranslatedParas = article.paragraphs.filter((p) => !p.querySelector(".hn-dual-translation"))
+  lazyTotal = untranslatedParas.length + (article.paragraphs.length > 0 ? 1 : 0) // +1 for title
+  lazyDone = 0
+  reportProgress(0, lazyTotal)
 
-  // 翻译标题
+  // 翻译标题（立即翻译，不惰性）
   const titleElement = document.querySelector("h1")
   if (titleElement && !titleElement.querySelector(".hn-dual-translation")) {
     try {
       const response = await chrome.runtime.sendMessage({
-        type: "TRANSLATE",
-        text: article.title,
-        targetLang
+        type: "TRANSLATE", text: article.title, targetLang: lazyTargetLang
       })
       if (response.translation) {
         const div = document.createElement("div")
         div.className = "hn-dual-translation"
-        div.style.cssText = `
-          font-size: 0.75em;
-          font-weight: normal;
-          color: inherit;
-          opacity: 0.65;
-          margin-top: 6px;
-        `
+        div.style.cssText = "font-size:0.75em;font-weight:normal;color:inherit;opacity:0.65;margin-top:6px;"
         div.textContent = response.translation
         titleElement.appendChild(div)
       }
     } catch (error) {
       console.error("Title translation error:", error)
     }
-    done++
-    reportProgress(done, total)
+    lazyDone++
+    reportProgress(lazyDone, lazyTotal)
   }
 
-  // 翻译段落
-  for (const paragraph of article.paragraphs) {
-    if (shouldStop) { reportStopped(); return }
-    if (paragraph.querySelector(".hn-dual-translation")) continue
+  // 清理旧 observer
+  if (lazyObserver) lazyObserver.disconnect()
 
-    const text = paragraph.textContent?.trim() || ""
-    if (text.length < 20) continue
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: "TRANSLATE",
-        text,
-        targetLang
-      })
-      if (response.translation) {
-        const div = document.createElement("div")
-        div.className = "hn-dual-translation"
-        div.style.cssText = `
-          display: block;
-          margin-top: 0.4em;
-          opacity: 0.7;
-        `
-        div.textContent = response.translation
-        paragraph.after(div)
-      }
-    } catch (error) {
-      console.error("Paragraph translation error:", error)
+  // 惰性翻译段落（rootMargin: 提前 300px）
+  lazyObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting || shouldStop) continue
+      const el = entry.target as HTMLElement
+      lazyObserver?.unobserve(el)
+      translateParagraph(el)
     }
+  }, { rootMargin: "300px 0px" })
 
-    done++
-    reportProgress(done, total)
-    await new Promise((resolve) => setTimeout(resolve, 500))
+  for (const para of untranslatedParas) {
+    lazyObserver.observe(para)
   }
-
-  reportComplete(total)
 }
 
 // 主组件

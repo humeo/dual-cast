@@ -74,167 +74,106 @@ function reportComplete(total: number) {
   chrome.runtime.sendMessage({ type: "TRANSLATION_COMPLETE", total }).catch(() => {})
 }
 
-function reportError(message: string) {
-  chrome.runtime.sendMessage({ type: "TRANSLATION_ERROR", message }).catch(() => {})
-}
-
-function reportStopped() {
-  chrome.runtime.sendMessage({ type: "TRANSLATION_STOPPED" }).catch(() => {})
-}
-
 // 翻译取消标志
 let shouldStop = false
 
-// 翻译当前页面
+// 惰性翻译：用 IntersectionObserver 只翻译进入视口的内容
+let lazyObserver: IntersectionObserver | null = null
+let lazyTargetLang = "zh"
+let lazyTotal = 0
+let lazyDone = 0
+
+async function translateElement(el: HTMLElement, type: "title" | "toptext" | "comment") {
+  if (shouldStop || el.getAttribute("data-hn-dual-translated") === "true") return
+  el.setAttribute("data-hn-dual-translated", "true")
+
+  const text = el.textContent || ""
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "TRANSLATE", text, targetLang: lazyTargetLang
+    })
+    if (!response.translation) return
+
+    const div = document.createElement("div")
+    if (type === "title") {
+      div.className = "hn-dual-translation"
+      div.style.cssText = "color:#666;font-size:0.9em;margin-top:4px;line-height:1.4;padding:4px 0;"
+      div.textContent = response.translation
+      const titleRow = el.closest(".athing")
+      if (titleRow?.nextElementSibling) {
+        const subtext = titleRow.nextElementSibling.querySelector(".subtext")
+        if (subtext) subtext.parentElement?.insertBefore(div, subtext)
+      }
+    } else if (type === "toptext") {
+      div.className = "hn-dual-toptext-translation"
+      div.style.cssText = "background:#f6f6ef;padding:8px;margin-top:8px;border-left:2px solid #ff6600;color:#333;font-size:0.95em;line-height:1.5;"
+      div.textContent = response.translation
+      el.after(div)
+    } else {
+      div.className = "hn-dual-comment-translation"
+      div.style.cssText = "background:#f6f6ef;padding:8px;margin-top:8px;border-left:2px solid #ff6600;color:#333;font-size:0.95em;line-height:1.5;"
+      div.textContent = response.translation
+      el.appendChild(div)
+    }
+  } catch (error) {
+    console.error("Translation error:", error)
+  }
+
+  lazyDone++
+  reportProgress(lazyDone, lazyTotal)
+  if (lazyDone >= lazyTotal) reportComplete(lazyTotal)
+}
+
+// 翻译当前页面（惰性模式）
 async function translateCurrentPage() {
-  console.log("开始翻译页面...")
+  console.log("开始惰性翻译页面...")
 
   const settings = await chrome.storage.sync.get(["targetLang"])
-  const targetLang = settings.targetLang || "zh"
+  lazyTargetLang = settings.targetLang || "zh"
 
-  // 先统计总数
+  // 收集所有待翻译元素
   const titleLinks = Array.from(
     document.querySelectorAll('.titleline > a:not([data-hn-dual-translated])')
-  ).filter((el) => (el.textContent || "").trim().length >= 5)
+  ).filter((el) => (el.textContent || "").trim().length >= 5) as HTMLElement[]
 
   const topTexts = Array.from(
     document.querySelectorAll('.toptext:not([data-hn-dual-translated])')
-  ).filter((el) => (el.textContent || "").trim().length >= 10)
+  ).filter((el) => (el.textContent || "").trim().length >= 10) as HTMLElement[]
 
   const comments = Array.from(
     document.querySelectorAll('.commtext:not([data-hn-dual-translated])')
-  ).filter((el) => (el.textContent || "").trim().length >= 10)
+  ).filter((el) => (el.textContent || "").trim().length >= 10) as HTMLElement[]
 
-  const total = titleLinks.length + topTexts.length + comments.length
-  let done = 0
+  lazyTotal = titleLinks.length + topTexts.length + comments.length
+  lazyDone = 0
+  reportProgress(0, lazyTotal)
 
-  reportProgress(done, total)
+  // 清理旧 observer
+  if (lazyObserver) lazyObserver.disconnect()
 
-  try {
-    // 翻译标题
-    for (const link of titleLinks) {
-      if (shouldStop) { reportStopped(); return }
-      const titleElement = link as HTMLAnchorElement
-      titleElement.setAttribute('data-hn-dual-translated', 'true')
-
-      const text = titleElement.textContent || ""
-      try {
-        const response = await chrome.runtime.sendMessage({
-          type: "TRANSLATE",
-          text,
-          targetLang
-        })
-
-        if (response.translation) {
-          const translationDiv = document.createElement('div')
-          translationDiv.className = 'hn-dual-translation'
-          translationDiv.style.cssText = `
-            color: #666;
-            font-size: 0.9em;
-            margin-top: 4px;
-            line-height: 1.4;
-            padding: 4px 0;
-          `
-          translationDiv.textContent = response.translation
-
-          const titleRow = titleElement.closest('.athing')
-          if (titleRow && titleRow.nextElementSibling) {
-            const subtext = titleRow.nextElementSibling.querySelector('.subtext')
-            if (subtext) {
-              subtext.parentElement?.insertBefore(translationDiv, subtext)
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Translation error:", error)
-      }
-
-      done++
-      reportProgress(done, total)
-      await new Promise((resolve) => setTimeout(resolve, 300))
+  // rootMargin: 提前 200px 开始翻译（视口下方 200px 的内容也会被翻译）
+  lazyObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting || shouldStop) continue
+      const el = entry.target as HTMLElement
+      lazyObserver?.unobserve(el)
+      const type = el.dataset.hnDualType as "title" | "toptext" | "comment"
+      translateElement(el, type)
     }
+  }, { rootMargin: "200px 0px" })
 
-    // 翻译 Ask HN 帖子正文
-    for (const topText of topTexts) {
-      if (shouldStop) { reportStopped(); return }
-      const topTextElement = topText as HTMLElement
-      topTextElement.setAttribute('data-hn-dual-translated', 'true')
-
-      const text = topTextElement.textContent || ""
-      try {
-        const response = await chrome.runtime.sendMessage({
-          type: "TRANSLATE",
-          text,
-          targetLang
-        })
-
-        if (response.translation) {
-          const translationDiv = document.createElement('div')
-          translationDiv.className = 'hn-dual-toptext-translation'
-          translationDiv.style.cssText = `
-            background: #f6f6ef;
-            padding: 8px;
-            margin-top: 8px;
-            border-left: 2px solid #ff6600;
-            color: #333;
-            font-size: 0.95em;
-            line-height: 1.5;
-          `
-          translationDiv.textContent = response.translation
-          topTextElement.after(translationDiv)
-        }
-      } catch (error) {
-        console.error("Translation error:", error)
-      }
-
-      done++
-      reportProgress(done, total)
-      await new Promise((resolve) => setTimeout(resolve, 300))
-    }
-
-    // 翻译评论
-    for (const comment of comments) {
-      if (shouldStop) { reportStopped(); return }
-      const commentElement = comment as HTMLElement
-      commentElement.setAttribute('data-hn-dual-translated', 'true')
-
-      const text = commentElement.textContent || ""
-      try {
-        const response = await chrome.runtime.sendMessage({
-          type: "TRANSLATE",
-          text,
-          targetLang
-        })
-
-        if (response.translation) {
-          const translationDiv = document.createElement('div')
-          translationDiv.className = 'hn-dual-comment-translation'
-          translationDiv.style.cssText = `
-            background: #f6f6ef;
-            padding: 8px;
-            margin-top: 8px;
-            border-left: 2px solid #ff6600;
-            color: #333;
-            font-size: 0.95em;
-            line-height: 1.5;
-          `
-          translationDiv.textContent = response.translation
-          commentElement.appendChild(translationDiv)
-        }
-      } catch (error) {
-        console.error("Translation error:", error)
-      }
-
-      done++
-      reportProgress(done, total)
-      await new Promise((resolve) => setTimeout(resolve, 300))
-    }
-
-    console.log("翻译完成！")
-    reportComplete(total)
-  } catch (error) {
-    console.error("翻译失败:", error)
-    reportError(error instanceof Error ? error.message : "翻译失败")
+  // 标记类型并观察
+  for (const el of titleLinks) {
+    el.dataset.hnDualType = "title"
+    lazyObserver.observe(el)
+  }
+  for (const el of topTexts) {
+    el.dataset.hnDualType = "toptext"
+    lazyObserver.observe(el)
+  }
+  for (const el of comments) {
+    el.dataset.hnDualType = "comment"
+    lazyObserver.observe(el)
   }
 }
 
