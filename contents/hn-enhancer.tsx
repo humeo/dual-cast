@@ -42,6 +42,8 @@ const HNEnhancer = () => {
       }
       if (message.type === "STOP_TRANSLATION") {
         shouldStop = true
+        if (lazyObserver) lazyObserver.disconnect()
+        reportStopped(lazyDone, lazyTotal)
         sendResponse({ success: true })
       }
       if (message.type === "TOGGLE_TRANSLATIONS") {
@@ -129,6 +131,7 @@ async function translateElement(el: HTMLElement, type: "title" | "toptext" | "co
   }
 
   lazyDone++
+  if (shouldStop) return
   reportProgress(lazyDone, lazyTotal)
   if (lazyDone >= lazyTotal) reportComplete(lazyTotal)
 }
@@ -168,7 +171,7 @@ async function translateCurrentPage() {
   // 清理旧 observer
   if (lazyObserver) lazyObserver.disconnect()
 
-  // rootMargin: 提前 200px 开始翻译（视口下方 200px 的内容也会被翻译）
+  // rootMargin: 足够大确保整个页面的标题都被触发（评论页仍然惰性）
   lazyObserver = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue
@@ -183,7 +186,7 @@ async function translateCurrentPage() {
       console.log(`[HN Dual] Translating ${type}: "${(el.textContent || "").slice(0, 40)}..."`)
       translateElement(el, type)
     }
-  }, { rootMargin: "200px 0px" })
+  }, { rootMargin: "9999px 0px" })
 
   // 标记类型并观察
   for (const el of titleLinks) {

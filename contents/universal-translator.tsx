@@ -35,6 +35,11 @@ function reportComplete(total: number) {
   chrome.runtime.sendMessage({ type: "TRANSLATION_COMPLETE", total }).catch(() => {})
 }
 
+function reportStopped() {
+  chrome.storage.local.remove("translationState")
+  chrome.runtime.sendMessage({ type: "TRANSLATION_STOPPED" }).catch(() => {})
+}
+
 function reportError(message: string) {
   chrome.runtime.sendMessage({ type: "TRANSLATION_ERROR", message }).catch(() => {})
 }
@@ -131,6 +136,7 @@ async function translateParagraph(paragraph: HTMLElement) {
   }
 
   lazyDone++
+  if (shouldStop) return
   reportProgress(lazyDone, lazyTotal)
   if (lazyDone >= lazyTotal) reportComplete(lazyTotal)
 }
@@ -214,6 +220,8 @@ const UniversalTranslator = () => {
       }
       if (message.type === "STOP_TRANSLATION") {
         shouldStop = true
+        if (lazyObserver) lazyObserver.disconnect()
+        reportStopped()
         sendResponse({ success: true })
       }
       if (message.type === "GET_ARTICLE_TEXT") {

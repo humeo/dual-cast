@@ -101,6 +101,8 @@ function IndexPopup() {
   const [apiBaseUrl, setApiBaseUrl] = useState("")
   const [apiModel, setApiModel] = useState("")
   const [openAIBatchSize, setOpenAIBatchSize] = useState(10)
+  const [inputTokenPrice, setInputTokenPrice] = useState(0.15)
+  const [outputTokenPrice, setOutputTokenPrice] = useState(0.60)
   const [targetLang, setTargetLang] = useState("zh")
   const [saved, setSaved] = useState(false)
   const [showTranslations, setShowTranslations] = useState(true)
@@ -129,6 +131,8 @@ function IndexPopup() {
         if (result.apiBaseUrl) setApiBaseUrl(result.apiBaseUrl)
         if (result.apiModel) setApiModel(result.apiModel)
         if (result.openAIBatchSize) setOpenAIBatchSize(result.openAIBatchSize)
+        if (result.inputTokenPrice != null) setInputTokenPrice(result.inputTokenPrice)
+        if (result.outputTokenPrice != null) setOutputTokenPrice(result.outputTokenPrice)
         setShowTranslations(result.showTranslations !== false)
         setHistory(result.summaryHistory || [])
         if (!result.apiKey) setSettingsOpen(true)
@@ -176,7 +180,7 @@ function IndexPopup() {
   }, [activeTab])
 
   const handleSave = () => {
-    chrome.storage.local.set({ apiKey, apiProvider, openaiKeyForSummary, apiBaseUrl, apiModel, openAIBatchSize }, () => {
+    chrome.storage.local.set({ apiKey, apiProvider, openaiKeyForSummary, apiBaseUrl, apiModel, openAIBatchSize, inputTokenPrice, outputTokenPrice }, () => {
       chrome.storage.sync.set({ targetLang }, () => {
         setSaved(true)
         setTimeout(() => { setSaved(false); setSettingsOpen(false) }, 1200)
@@ -532,6 +536,34 @@ function IndexPopup() {
               />
             </div>
           </div>
+
+          {/* Token pricing */}
+          {apiProvider === "openai" && (
+            <div style={{ display: "flex", gap: "10px", marginBottom: "18px" }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Input $/1M tokens</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={inputTokenPrice}
+                  onChange={(e) => setInputTokenPrice(parseFloat(e.target.value) || 0)}
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Output $/1M tokens</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={outputTokenPrice}
+                  onChange={(e) => setOutputTokenPrice(parseFloat(e.target.value) || 0)}
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+          )}
 
           <button
             onClick={handleSave}
@@ -1056,7 +1088,7 @@ function IndexPopup() {
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px" }}>
                       <span style={{ color: C.textSec }}>OpenAI ({apiModel || "gpt-4o-mini"})</span>
                       <span style={{ fontWeight: "600", color: C.text }}>
-                        ~${(usageStats.openaiChars / 4 / 1_000_000 * 0.15 + usageStats.openaiChars / 4 / 1_000_000 * 0.6).toFixed(4)}
+                        ~${(usageStats.openaiChars / 4 / 1_000_000 * inputTokenPrice + usageStats.openaiChars / 4 / 1_000_000 * outputTokenPrice).toFixed(4)}
                       </span>
                     </div>
                   )}
