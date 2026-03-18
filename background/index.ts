@@ -91,11 +91,12 @@ async function flushQueue() {
   if (requestQueue.length === 0) return
 
   const batch = requestQueue.splice(0, BATCH_SIZE)
-  const settings = await chrome.storage.local.get(["apiKey", "apiProvider", "apiBaseUrl", "apiModel"])
+  const settings = await chrome.storage.local.get(["apiKey", "apiProvider", "apiBaseUrl", "apiModel", "openAIBatchSize"])
 
   if (!settings.apiKey) {
     const err = new Error("请先在插件设置中配置 API Key")
     batch.forEach((item) => item.reject(err))
+    if (requestQueue.length > 0) scheduleFlush()
     return
   }
 
@@ -127,6 +128,7 @@ async function flushQueue() {
     } catch (e) {
       batch.forEach((item) => item.reject(e as Error))
     }
+    if (requestQueue.length > 0) scheduleFlush()
     return
   }
 
@@ -145,10 +147,12 @@ async function flushQueue() {
     } catch (e) {
       batch.forEach((item) => item.reject(e as Error))
     }
+    if (requestQueue.length > 0) scheduleFlush()
     return
   }
 
   batch.forEach((item) => item.reject(new Error(`不支持的翻译服务: ${provider}`)))
+  if (requestQueue.length > 0) scheduleFlush()
 }
 
 // 监听来自 content script 的消息
