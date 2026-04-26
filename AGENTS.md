@@ -34,7 +34,7 @@ Prettier is configured in `.prettierrc.mjs`: 2 spaces, 80-column print width, do
 
 ## Testing Guidelines
 
-Before submitting changes, run `bunx tsc --noEmit`, Prettier on touched files, and `bun run build`. Use `bun run test:e2e` for the Hacker News LLM path; it reads `.env.local` and verifies title, comment, progressive, and scroll-triggered translation. Smoke-test non-HN article/social pages through `contents/universal-translator.tsx`. When adding tests, prefer focused `*.test.ts` or `*.test.tsx` files near the module under test.
+Before submitting changes, run `bunx tsc --noEmit`, Prettier on touched files, and `bun run build`. Use `bun run test:e2e` for the Hacker News LLM path; it reads `.env.local` and verifies title, comment, progressive, and manual next-batch translation. Smoke-test non-HN article/social pages through `contents/universal-translator.tsx`. When adding tests, prefer focused `*.test.ts` or `*.test.tsx` files near the module under test.
 
 ## Commit & Pull Request Guidelines
 

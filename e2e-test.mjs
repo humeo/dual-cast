@@ -51,10 +51,20 @@ const HN_FIXTURE = `<!doctype html>
             <div class="commtext" id="first-comment">I tried a similar translation workflow last week, and the useful part was keeping the original sentence directly above the translated text.</div>
           </td>
         </tr>
+        <tr class="athing comtr" id="comment-row-2">
+          <td>
+            <div class="commtext" id="middle-comment-1">A manual batch button also makes the API cost more predictable because the reader can stop before translating the whole thread.</div>
+          </td>
+        </tr>
+        <tr class="athing comtr" id="comment-row-3">
+          <td>
+            <div class="commtext" id="middle-comment-2">For long discussions, I would rather translate five comments at a time than have background scrolling trigger work unexpectedly.</div>
+          </td>
+        </tr>
         <tr>
           <td><div id="lazy-spacer" style="height: 14000px"></div></td>
         </tr>
-        <tr class="athing comtr" id="comment-row-2">
+        <tr class="athing comtr" id="comment-row-4">
           <td>
             <div class="commtext" id="deep-comment">The important part about lazy translation is that comments far below the fold should not spend tokens until the reader scrolls to them.</div>
           </td>
@@ -302,7 +312,7 @@ async function main() {
     )
     assert(
       firstPass.deepComment === "",
-      "Deep offscreen comment translated before scrolling"
+      "Deep offscreen comment translated before manual next batch"
     )
 
     const progressiveState = await getTranslationState(extensionPage)
@@ -314,6 +324,19 @@ async function main() {
     )
 
     await hnPage.locator("#deep-comment").scrollIntoViewIfNeeded()
+    await hnPage.waitForTimeout(1500)
+    const afterScrollOnly = await hnPage.evaluate(
+      () =>
+        document
+          .querySelector("#deep-comment .hn-dual-comment-translation")
+          ?.textContent?.trim() || ""
+    )
+    assert(
+      afterScrollOnly === "",
+      "Scrolled HN comment translated without clicking next batch"
+    )
+
+    await hnPage.locator("#hn-dual-manual-control [data-role='next']").click()
     await hnPage.waitForFunction(
       () =>
         Boolean(
@@ -355,7 +378,7 @@ async function main() {
     )
 
     console.log(
-      "HN E2E passed: title, visible comment, progressive state, scroll lazy comment"
+      "HN E2E passed: title, visible comment, manual next batch, no scroll trigger"
     )
   } finally {
     await context.close()

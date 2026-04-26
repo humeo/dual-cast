@@ -13,6 +13,13 @@ const logger = createLogger("hn-enhancer")
 // 控制翻译内容的可见性
 const VISIBILITY_STYLE_ID = "hn-dual-visibility"
 const HIDE_CSS = `.hn-dual-translation, .hn-dual-comment-translation, .hn-dual-toptext-translation { display: none !important; }`
+const MANUAL_CONTROL_ID = "hn-dual-manual-control"
+const MANUAL_BATCH_SIZE = 5
+
+interface ManualQueueItem {
+  el: HTMLElement
+  type: "title" | "toptext" | "comment"
+}
 
 function applyVisibility(show: boolean) {
   let el = document.getElementById(
@@ -48,8 +55,8 @@ const HNEnhancer = () => {
       }
       if (message.type === "STOP_TRANSLATION") {
         shouldStop = true
-        if (lazyObserver) lazyObserver.disconnect()
-        reportStopped(lazyDone, lazyTotal)
+        reportStopped(manualDone, manualTotal)
+        updateManualControl()
         sendResponse({ success: true })
       }
       if (message.type === "TOGGLE_TRANSLATIONS") {
@@ -115,11 +122,11 @@ function reportStopped(_done: number, _total: number) {
 // 翻译取消标志
 let shouldStop = false
 
-// 惰性翻译：用 IntersectionObserver 只翻译进入视口的内容
-let lazyObserver: IntersectionObserver | null = null
-let lazyTargetLang = "zh"
-let lazyTotal = 0
-let lazyDone = 0
+let manualTargetLang = "zh"
+let manualQueue: ManualQueueItem[] = []
+let manualTotal = 0
+let manualDone = 0
+let manualInFlight = false
 
 async function translateElement(
   el: HTMLElement,
@@ -134,7 +141,7 @@ async function translateElement(
     const response = await chrome.runtime.sendMessage({
       type: "TRANSLATE",
       text,
-      targetLang: lazyTargetLang
+      targetLang: manualTargetLang
     })
     if (!response.translation) return
 
@@ -166,18 +173,142 @@ async function translateElement(
     logger.error("Translation error", error)
   }
 
-  lazyDone++
+  manualDone++
   if (shouldStop) return
-  reportProgress(lazyDone, lazyTotal)
-  if (lazyDone >= lazyTotal) reportComplete(lazyTotal)
+  reportProgress(manualDone, manualTotal)
+  if (manualDone >= manualTotal) reportComplete(manualTotal)
 }
 
-// 翻译当前页面（惰性模式）
+function ensureManualControl() {
+  let control = document.getElementById(MANUAL_CONTROL_ID)
+  if (control) return control
+
+  control = document.createElement("div")
+  control.id = MANUAL_CONTROL_ID
+  control.style.cssText = [
+    "position:fixed",
+    "right:16px",
+    "bottom:16px",
+    "z-index:2147483647",
+    "display:flex",
+    "gap:8px",
+    "align-items:center",
+    "padding:8px",
+    "border:1px solid rgba(255,102,0,0.35)",
+    "border-radius:8px",
+    "background:#fffdf4",
+    "box-shadow:0 6px 18px rgba(0,0,0,0.12)",
+    "font-family:Verdana,Geneva,sans-serif",
+    "font-size:12px",
+    "color:#333"
+  ].join(";")
+
+  const status = document.createElement("span")
+  status.dataset.role = "status"
+  status.style.cssText = "min-width:58px;color:#666"
+
+  const nextButton = document.createElement("button")
+  nextButton.dataset.role = "next"
+  nextButton.type = "button"
+  nextButton.style.cssText = [
+    "border:0",
+    "border-radius:6px",
+    "background:#ff6600",
+    "color:#fff",
+    "padding:6px 10px",
+    "font:inherit",
+    "font-weight:600",
+    "cursor:pointer"
+  ].join(";")
+  nextButton.addEventListener("click", () => {
+    translateNextManualBatch()
+  })
+
+  const stopButton = document.createElement("button")
+  stopButton.dataset.role = "stop"
+  stopButton.type = "button"
+  stopButton.textContent = "Stop"
+  stopButton.style.cssText = [
+    "border:1px solid #ddd",
+    "border-radius:6px",
+    "background:#fff",
+    "color:#666",
+    "padding:6px 9px",
+    "font:inherit",
+    "cursor:pointer"
+  ].join(";")
+  stopButton.addEventListener("click", () => {
+    shouldStop = true
+    reportStopped(manualDone, manualTotal)
+    updateManualControl()
+  })
+
+  control.append(status, nextButton, stopButton)
+  document.body.appendChild(control)
+  return control
+}
+
+function updateManualControl() {
+  if (manualTotal === 0) return
+
+  const control = ensureManualControl()
+  const status = control.querySelector<HTMLElement>('[data-role="status"]')
+  const nextButton =
+    control.querySelector<HTMLButtonElement>('[data-role="next"]')
+  const stopButton =
+    control.querySelector<HTMLButtonElement>('[data-role="stop"]')
+
+  if (status) status.textContent = `${manualDone}/${manualTotal}`
+  if (nextButton) {
+    const remaining = manualQueue.length
+    nextButton.disabled = manualInFlight || remaining === 0
+    nextButton.textContent =
+      remaining === 0
+        ? "Done"
+        : manualInFlight
+          ? "Translating..."
+          : `Translate next ${Math.min(MANUAL_BATCH_SIZE, remaining)}`
+    nextButton.style.opacity = nextButton.disabled ? "0.65" : "1"
+    nextButton.style.cursor = nextButton.disabled ? "default" : "pointer"
+  }
+  if (stopButton) {
+    stopButton.style.display = manualInFlight ? "inline-block" : "none"
+  }
+}
+
+async function translateNextManualBatch() {
+  if (manualInFlight || manualQueue.length === 0) return
+
+  shouldStop = false
+  manualInFlight = true
+  updateManualControl()
+
+  let translatedInBatch = 0
+  while (
+    !shouldStop &&
+    translatedInBatch < MANUAL_BATCH_SIZE &&
+    manualQueue.length > 0
+  ) {
+    const item = manualQueue.shift()!
+    await translateElement(item.el, item.type)
+    translatedInBatch++
+  }
+
+  manualInFlight = false
+  if (shouldStop) {
+    reportStopped(manualDone, manualTotal)
+  } else if (manualQueue.length === 0) {
+    reportComplete(manualTotal)
+  }
+  updateManualControl()
+}
+
+// 翻译当前页面（手动批次模式）
 async function translateCurrentPage() {
-  logger.debug("Starting lazy page translation")
+  logger.debug("Starting manual batch page translation")
 
   const settings = await chrome.storage.sync.get(["targetLang"])
-  lazyTargetLang = settings.targetLang || "zh"
+  manualTargetLang = settings.targetLang || "zh"
 
   // 收集所有待翻译元素
   const titleLinks = Array.from(
@@ -192,62 +323,32 @@ async function translateCurrentPage() {
     document.querySelectorAll(".commtext:not([data-hn-dual-translated])")
   ).filter((el) => (el.textContent || "").trim().length >= 10) as HTMLElement[]
 
-  lazyTotal = titleLinks.length + topTexts.length + comments.length
-  lazyDone = 0
+  manualQueue = [
+    ...titleLinks.map((el) => ({ el, type: "title" as const })),
+    ...topTexts.map((el) => ({ el, type: "toptext" as const })),
+    ...comments.map((el) => ({ el, type: "comment" as const }))
+  ]
+  manualTotal = manualQueue.length
+  manualDone = 0
+  manualInFlight = false
+  shouldStop = false
 
   logger.debug("Found translatable HN elements", {
     titles: titleLinks.length,
     topTexts: topTexts.length,
     comments: comments.length,
-    total: lazyTotal
+    total: manualTotal
   })
 
-  if (lazyTotal === 0) {
+  if (manualTotal === 0) {
     reportComplete(0)
+    updateManualControl()
     return
   }
 
-  reportProgress(0, lazyTotal)
-
-  // 清理旧 observer
-  if (lazyObserver) lazyObserver.disconnect()
-
-  // rootMargin: 足够大确保整个页面的标题都被触发（评论页仍然惰性）
-  lazyObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue
-        if (shouldStop) {
-          lazyObserver?.unobserve(entry.target)
-          reportStopped(lazyDone, lazyTotal)
-          continue
-        }
-        const el = entry.target as HTMLElement
-        lazyObserver?.unobserve(el)
-        const type = el.dataset.hnDualType as "title" | "toptext" | "comment"
-        logger.debug("Translating HN element", {
-          type,
-          preview: (el.textContent || "").slice(0, 40)
-        })
-        translateElement(el, type)
-      }
-    },
-    { rootMargin: "9999px 0px" }
-  )
-
-  // 标记类型并观察
-  for (const el of titleLinks) {
-    el.dataset.hnDualType = "title"
-    lazyObserver.observe(el)
-  }
-  for (const el of topTexts) {
-    el.dataset.hnDualType = "toptext"
-    lazyObserver.observe(el)
-  }
-  for (const el of comments) {
-    el.dataset.hnDualType = "comment"
-    lazyObserver.observe(el)
-  }
+  reportProgress(0, manualTotal)
+  updateManualControl()
+  await translateNextManualBatch()
 }
 
 export default HNEnhancer

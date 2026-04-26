@@ -15,6 +15,14 @@ const logger = createLogger("universal-translator")
 // 控制翻译内容的可见性
 const VISIBILITY_STYLE_ID = "hn-dual-visibility"
 const HIDE_CSS = `.hn-dual-translation { display: none !important; }`
+const MANUAL_CONTROL_ID = "hn-dual-manual-control"
+const MANUAL_BATCH_SIZE = 5
+
+interface ManualQueueItem {
+  el: HTMLElement
+  type: "title" | "paragraph"
+  text: string
+}
 
 function applyVisibility(show: boolean) {
   let el = document.getElementById(
@@ -127,43 +135,173 @@ function detectArticle() {
 // 翻译取消标志
 let shouldStop = false
 
-// 惰性翻译：用 IntersectionObserver 只翻译进入视口的内容
-let lazyObserver: IntersectionObserver | null = null
-let lazyTargetLang = "zh"
-let lazyTotal = 0
-let lazyDone = 0
+let manualTargetLang = "zh"
+let manualQueue: ManualQueueItem[] = []
+let manualTotal = 0
+let manualDone = 0
+let manualInFlight = false
 
-async function translateParagraph(paragraph: HTMLElement) {
-  if (shouldStop || paragraph.querySelector(".hn-dual-translation")) return
+async function translateManualItem(item: ManualQueueItem) {
+  if (shouldStop || item.el.querySelector(".hn-dual-translation")) return
 
-  const text = paragraph.textContent?.trim() || ""
+  const text = item.text.trim()
   if (text.length < 20) return
 
   try {
     const response = await chrome.runtime.sendMessage({
       type: "TRANSLATE",
       text,
-      targetLang: lazyTargetLang
+      targetLang: manualTargetLang
     })
     if (response.translation) {
       const div = document.createElement("div")
       div.className = "hn-dual-translation"
       div.style.cssText =
-        "display:block;margin-top:0.15em;margin-bottom:0.6em;opacity:0.7;"
+        item.type === "title"
+          ? "font-size:0.75em;font-weight:normal;color:inherit;opacity:0.65;margin-top:2px;margin-bottom:8px;"
+          : "display:block;margin-top:0.15em;margin-bottom:0.6em;opacity:0.7;"
       div.textContent = response.translation
-      paragraph.after(div)
+      if (item.type === "title") {
+        item.el.appendChild(div)
+      } else {
+        item.el.after(div)
+      }
     }
   } catch (error) {
-    logger.error("Paragraph translation error", error)
+    logger.error("Manual translation error", error)
   }
 
-  lazyDone++
+  manualDone++
   if (shouldStop) return
-  reportProgress(lazyDone, lazyTotal)
-  if (lazyDone >= lazyTotal) reportComplete(lazyTotal)
+  reportProgress(manualDone, manualTotal)
+  if (manualDone >= manualTotal) reportComplete(manualTotal)
 }
 
-// 翻译文章，段落双语对照，样式继承原页面（惰性模式）
+function ensureManualControl() {
+  let control = document.getElementById(MANUAL_CONTROL_ID)
+  if (control) return control
+
+  control = document.createElement("div")
+  control.id = MANUAL_CONTROL_ID
+  control.style.cssText = [
+    "position:fixed",
+    "right:18px",
+    "bottom:18px",
+    "z-index:2147483647",
+    "display:flex",
+    "gap:8px",
+    "align-items:center",
+    "padding:9px",
+    "border:1px solid rgba(79,70,229,0.28)",
+    "border-radius:8px",
+    "background:#ffffff",
+    "box-shadow:0 8px 24px rgba(15,23,42,0.16)",
+    "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+    "font-size:13px",
+    "color:#334155"
+  ].join(";")
+
+  const status = document.createElement("span")
+  status.dataset.role = "status"
+  status.style.cssText = "min-width:58px;color:#64748b"
+
+  const nextButton = document.createElement("button")
+  nextButton.dataset.role = "next"
+  nextButton.type = "button"
+  nextButton.style.cssText = [
+    "border:0",
+    "border-radius:6px",
+    "background:#4f46e5",
+    "color:#fff",
+    "padding:7px 11px",
+    "font:inherit",
+    "font-weight:650",
+    "cursor:pointer"
+  ].join(";")
+  nextButton.addEventListener("click", () => {
+    translateNextManualBatch()
+  })
+
+  const stopButton = document.createElement("button")
+  stopButton.dataset.role = "stop"
+  stopButton.type = "button"
+  stopButton.textContent = "Stop"
+  stopButton.style.cssText = [
+    "border:1px solid #e2e8f0",
+    "border-radius:6px",
+    "background:#fff",
+    "color:#64748b",
+    "padding:7px 10px",
+    "font:inherit",
+    "cursor:pointer"
+  ].join(";")
+  stopButton.addEventListener("click", () => {
+    shouldStop = true
+    reportStopped()
+    updateManualControl()
+  })
+
+  control.append(status, nextButton, stopButton)
+  document.body.appendChild(control)
+  return control
+}
+
+function updateManualControl() {
+  if (manualTotal === 0) return
+
+  const control = ensureManualControl()
+  const status = control.querySelector<HTMLElement>('[data-role="status"]')
+  const nextButton =
+    control.querySelector<HTMLButtonElement>('[data-role="next"]')
+  const stopButton =
+    control.querySelector<HTMLButtonElement>('[data-role="stop"]')
+
+  if (status) status.textContent = `${manualDone}/${manualTotal}`
+  if (nextButton) {
+    const remaining = manualQueue.length
+    nextButton.disabled = manualInFlight || remaining === 0
+    nextButton.textContent =
+      remaining === 0
+        ? "Done"
+        : manualInFlight
+          ? "Translating..."
+          : `Translate next ${Math.min(MANUAL_BATCH_SIZE, remaining)}`
+    nextButton.style.opacity = nextButton.disabled ? "0.65" : "1"
+    nextButton.style.cursor = nextButton.disabled ? "default" : "pointer"
+  }
+  if (stopButton) {
+    stopButton.style.display = manualInFlight ? "inline-block" : "none"
+  }
+}
+
+async function translateNextManualBatch() {
+  if (manualInFlight || manualQueue.length === 0) return
+
+  shouldStop = false
+  manualInFlight = true
+  updateManualControl()
+
+  let translatedInBatch = 0
+  while (
+    !shouldStop &&
+    translatedInBatch < MANUAL_BATCH_SIZE &&
+    manualQueue.length > 0
+  ) {
+    const item = manualQueue.shift()!
+    await translateManualItem(item)
+    translatedInBatch++
+  }
+
+  manualInFlight = false
+  if (shouldStop) {
+    reportStopped()
+  } else if (manualQueue.length === 0) {
+    reportComplete(manualTotal)
+  }
+  updateManualControl()
+}
+
+// 翻译文章，段落双语对照，样式继承原页面（手动批次模式）
 async function translatePage() {
   let article = detectArticle()
   // SPA 页面内容可能还没渲染，等 800ms 重试一次
@@ -177,58 +315,44 @@ async function translatePage() {
   }
 
   const settings = await chrome.storage.sync.get(["targetLang"])
-  lazyTargetLang = settings.targetLang || "zh"
+  manualTargetLang = settings.targetLang || "zh"
 
   const untranslatedParas = article.paragraphs.filter(
     (p) => !p.querySelector(".hn-dual-translation")
   )
-  lazyTotal = untranslatedParas.length + (article.paragraphs.length > 0 ? 1 : 0) // +1 for title
-  lazyDone = 0
-  reportProgress(0, lazyTotal)
 
-  // 翻译标题（立即翻译，不惰性）
+  manualQueue = []
   const titleElement = document.querySelector("h1")
   if (titleElement && !titleElement.querySelector(".hn-dual-translation")) {
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: "TRANSLATE",
-        text: article.title,
-        targetLang: lazyTargetLang
-      })
-      if (response.translation) {
-        const div = document.createElement("div")
-        div.className = "hn-dual-translation"
-        div.style.cssText =
-          "font-size:0.75em;font-weight:normal;color:inherit;opacity:0.65;margin-top:2px;margin-bottom:8px;"
-        div.textContent = response.translation
-        titleElement.appendChild(div)
-      }
-    } catch (error) {
-      logger.error("Title translation error", error)
-    }
-    lazyDone++
-    reportProgress(lazyDone, lazyTotal)
+    manualQueue.push({
+      el: titleElement as HTMLElement,
+      type: "title",
+      text: article.title
+    })
   }
-
-  // 清理旧 observer
-  if (lazyObserver) lazyObserver.disconnect()
-
-  // 惰性翻译段落（rootMargin: 提前 300px）
-  lazyObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting || shouldStop) continue
-        const el = entry.target as HTMLElement
-        lazyObserver?.unobserve(el)
-        translateParagraph(el)
-      }
-    },
-    { rootMargin: "300px 0px" }
-  )
 
   for (const para of untranslatedParas) {
-    lazyObserver.observe(para)
+    manualQueue.push({
+      el: para,
+      type: "paragraph",
+      text: para.textContent?.trim() || ""
+    })
   }
+
+  manualTotal = manualQueue.length
+  manualDone = 0
+  manualInFlight = false
+  shouldStop = false
+
+  if (manualTotal === 0) {
+    reportComplete(0)
+    updateManualControl()
+    return
+  }
+
+  reportProgress(0, manualTotal)
+  updateManualControl()
+  await translateNextManualBatch()
 }
 
 // 主组件
@@ -250,8 +374,8 @@ const UniversalTranslator = () => {
       }
       if (message.type === "STOP_TRANSLATION") {
         shouldStop = true
-        if (lazyObserver) lazyObserver.disconnect()
         reportStopped()
+        updateManualControl()
         sendResponse({ success: true })
       }
       if (message.type === "GET_ARTICLE_TEXT") {
