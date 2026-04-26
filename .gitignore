@@ -8,6 +8,7 @@
 
 # testing
 /coverage
+/test-screenshots
 
 # misc
 .DS_Store

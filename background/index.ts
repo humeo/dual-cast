@@ -1,4 +1,8 @@
+import { createLogger } from "~utils/logger"
+
 // Background service worker for handling translation requests
+
+const logger = createLogger("background")
 
 interface TranslationRequest {
   type: string
@@ -14,7 +18,7 @@ chrome.webNavigation.onCreatedNavigationTarget.addListener((details) => {
     if (chrome.runtime.lastError) return
     if (sourceTab.url?.includes("news.ycombinator.com")) {
       hnOriginatedTabs.add(details.tabId)
-      console.log(`HN Dual: Tab ${details.tabId} opened from HN`)
+      logger.debug("Tab opened from HN", { tabId: details.tabId })
     }
   })
 })
@@ -91,7 +95,13 @@ async function flushQueue() {
   if (requestQueue.length === 0) return
 
   const batch = requestQueue.splice(0, BATCH_SIZE)
-  const settings = await chrome.storage.local.get(["apiKey", "apiProvider", "apiBaseUrl", "apiModel", "openAIBatchSize"])
+  const settings = await chrome.storage.local.get([
+    "apiKey",
+    "apiProvider",
+    "apiBaseUrl",
+    "apiModel",
+    "openAIBatchSize"
+  ])
 
   if (!settings.apiKey) {
     const err = new Error("请先在插件设置中配置 API Key")
@@ -101,7 +111,10 @@ async function flushQueue() {
   }
 
   const provider = settings.apiProvider || "openai"
-  const baseUrl = (settings.apiBaseUrl || "https://api.openai.com").replace(/\/$/, "")
+  const baseUrl = (settings.apiBaseUrl || "https://api.openai.com").replace(
+    /\/$/,
+    ""
+  )
   const model = settings.apiModel || "gpt-4o-mini"
 
   // OpenAI 批量翻译（将多条文本合并成一个请求）
@@ -114,11 +127,20 @@ async function flushQueue() {
         const group = batch.slice(i, i + batchSize)
         const groupTexts = group.map((item) => item.text)
         try {
-          const translations = await translateBatchWithOpenAI(groupTexts, targetLang, settings.apiKey, baseUrl, model)
+          const translations = await translateBatchWithOpenAI(
+            groupTexts,
+            targetLang,
+            settings.apiKey,
+            baseUrl,
+            model
+          )
           const totalChars = groupTexts.reduce((sum, t) => sum + t.length, 0)
           recordUsage("openai", totalChars)
           group.forEach((item, j) => {
-            translationCache.set(`${item.text}:${item.targetLang}`, translations[j])
+            translationCache.set(
+              `${item.text}:${item.targetLang}`,
+              translations[j]
+            )
             item.resolve(translations[j])
           })
         } catch (e) {
@@ -137,7 +159,11 @@ async function flushQueue() {
     try {
       const texts = batch.map((item) => item.text)
       const targetLang = batch[0].targetLang
-      const translations = await translateBatchWithDeepL(texts, targetLang, settings.apiKey)
+      const translations = await translateBatchWithDeepL(
+        texts,
+        targetLang,
+        settings.apiKey
+      )
       const totalChars = texts.reduce((sum, t) => sum + t.length, 0)
       recordUsage("deepl", totalChars)
       batch.forEach((item, i) => {
@@ -151,77 +177,104 @@ async function flushQueue() {
     return
   }
 
-  batch.forEach((item) => item.reject(new Error(`不支持的翻译服务: ${provider}`)))
+  batch.forEach((item) =>
+    item.reject(new Error(`不支持的翻译服务: ${provider}`))
+  )
   if (requestQueue.length > 0) scheduleFlush()
 }
 
 // 监听来自 content script 的消息
-chrome.runtime.onMessage.addListener((request: TranslationRequest, sender, sendResponse) => {
-  // 检查当前标签页是否从 HN 打开
-  if (request.type === "CHECK_HN_REFERRER") {
-    const tabId = sender.tab?.id
-    sendResponse({ isFromHN: tabId ? hnOriginatedTabs.has(tabId) : false })
-    return true
-  }
-
-  if (request.type === "SUMMARIZE") {
-    chrome.storage.local.get(["apiKey", "apiProvider", "openaiKeyForSummary", "apiBaseUrl", "apiModel"], async (settings) => {
-      const key = settings.openaiKeyForSummary ||
-        (settings.apiProvider === "openai" ? settings.apiKey : null)
-      if (!key) {
-        sendResponse({ error: "总结功能需要 OpenAI API Key" })
-        return
-      }
-      const baseUrl = (settings.apiBaseUrl || "https://api.openai.com").replace(/\/$/, "")
-      const model = settings.apiModel || "gpt-4o-mini"
-      try {
-        const summary = await summarizeWithOpenAI(request.text, request.title, key, baseUrl, model)
-        sendResponse({ summary })
-      } catch (e) {
-        sendResponse({ error: (e as Error).message })
-      }
-    })
-    return true
-  }
-
-  if (request.type === "GET_TAB_ID") {
-    sendResponse({ tabId: sender.tab?.id })
-    return true
-  }
-
-  if (request.type === "GET_USAGE_STATS") {
-    sendResponse({ stats: currentSessionStats })
-    return true
-  }
-
-  if (request.type === "RESET_USAGE_STATS") {
-    currentSessionStats = {
-      totalChars: 0, totalRequests: 0,
-      deeplChars: 0, openaiChars: 0,
-      lastReset: Date.now()
+chrome.runtime.onMessage.addListener(
+  (request: TranslationRequest, sender, sendResponse) => {
+    // 检查当前标签页是否从 HN 打开
+    if (request.type === "CHECK_HN_REFERRER") {
+      const tabId = sender.tab?.id
+      sendResponse({ isFromHN: tabId ? hnOriginatedTabs.has(tabId) : false })
+      return true
     }
-    chrome.storage.local.set({ usageStats: currentSessionStats })
-    sendResponse({ success: true })
-    return true
-  }
 
-  if (request.type === "TRANSLATE") {
-    handleTranslation(request.text, request.targetLang)
-      .then((translation) => {
-        sendResponse({ translation })
-      })
-      .catch((error) => {
-        console.error("Translation error:", error)
-        sendResponse({ translation: null, error: error.message })
-      })
+    if (request.type === "SUMMARIZE") {
+      chrome.storage.local.get(
+        [
+          "apiKey",
+          "apiProvider",
+          "openaiKeyForSummary",
+          "apiBaseUrl",
+          "apiModel"
+        ],
+        async (settings) => {
+          const key =
+            settings.openaiKeyForSummary ||
+            (settings.apiProvider === "openai" ? settings.apiKey : null)
+          if (!key) {
+            sendResponse({ error: "总结功能需要 OpenAI API Key" })
+            return
+          }
+          const baseUrl = (
+            settings.apiBaseUrl || "https://api.openai.com"
+          ).replace(/\/$/, "")
+          const model = settings.apiModel || "gpt-4o-mini"
+          try {
+            const summary = await summarizeWithOpenAI(
+              request.text,
+              request.title,
+              key,
+              baseUrl,
+              model
+            )
+            sendResponse({ summary })
+          } catch (e) {
+            sendResponse({ error: (e as Error).message })
+          }
+        }
+      )
+      return true
+    }
 
-    // 返回 true 表示异步响应
-    return true
+    if (request.type === "GET_TAB_ID") {
+      sendResponse({ tabId: sender.tab?.id })
+      return true
+    }
+
+    if (request.type === "GET_USAGE_STATS") {
+      sendResponse({ stats: currentSessionStats })
+      return true
+    }
+
+    if (request.type === "RESET_USAGE_STATS") {
+      currentSessionStats = {
+        totalChars: 0,
+        totalRequests: 0,
+        deeplChars: 0,
+        openaiChars: 0,
+        lastReset: Date.now()
+      }
+      chrome.storage.local.set({ usageStats: currentSessionStats })
+      sendResponse({ success: true })
+      return true
+    }
+
+    if (request.type === "TRANSLATE") {
+      handleTranslation(request.text, request.targetLang)
+        .then((translation) => {
+          sendResponse({ translation })
+        })
+        .catch((error) => {
+          logger.error("Translation error", error)
+          sendResponse({ translation: null, error: error.message })
+        })
+
+      // 返回 true 表示异步响应
+      return true
+    }
   }
-})
+)
 
 // 处理翻译 - 走批量队列
-async function handleTranslation(text: string, targetLang: string): Promise<string> {
+async function handleTranslation(
+  text: string,
+  targetLang: string
+): Promise<string> {
   // 检查缓存
   const cacheKey = `${text}:${targetLang}`
   if (translationCache.has(cacheKey)) {
@@ -235,20 +288,40 @@ async function handleTranslation(text: string, targetLang: string): Promise<stri
 }
 
 // OpenAI 批量翻译（多条文本合并成一个请求，用编号分隔）
-async function translateBatchWithOpenAI(texts: string[], targetLang: string, apiKey: string, baseUrl: string, model: string): Promise<string[]> {
+async function translateBatchWithOpenAI(
+  texts: string[],
+  targetLang: string,
+  apiKey: string,
+  baseUrl: string,
+  model: string
+): Promise<string[]> {
   const langNames: Record<string, string> = {
-    zh: "Chinese", en: "English", ja: "Japanese", ko: "Korean",
-    de: "German", fr: "French", es: "Spanish", it: "Italian",
-    ru: "Russian", pt: "Portuguese", ar: "Arabic", nl: "Dutch",
-    pl: "Polish", tr: "Turkish", vi: "Vietnamese"
+    zh: "Chinese",
+    en: "English",
+    ja: "Japanese",
+    ko: "Korean",
+    de: "German",
+    fr: "French",
+    es: "Spanish",
+    it: "Italian",
+    ru: "Russian",
+    pt: "Portuguese",
+    ar: "Arabic",
+    nl: "Dutch",
+    pl: "Polish",
+    tr: "Turkish",
+    vi: "Vietnamese"
   }
   const targetLanguage = langNames[targetLang] || "Chinese"
 
   const numbered = texts.map((t, i) => `[${i + 1}] ${t}`).join("\n")
 
-  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const response = await fetch(getOpenAIChatCompletionsUrl(baseUrl), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
     body: JSON.stringify({
       model,
       messages: [
@@ -264,7 +337,9 @@ async function translateBatchWithOpenAI(texts: string[], targetLang: string, api
 
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(`OpenAI API 错误: ${error.error?.message || response.statusText}`)
+    throw new Error(
+      `OpenAI API 错误: ${error.error?.message || response.statusText}`
+    )
   }
 
   const data = await response.json()
@@ -286,11 +361,27 @@ async function translateBatchWithOpenAI(texts: string[], targetLang: string, api
 
 // DeepL 批量翻译（一次请求多个文本）
 // 返回的字符串若与原文相同，说明源语言已是目标语言，已跳过翻译
-async function translateBatchWithDeepL(texts: string[], targetLang: string, apiKey: string): Promise<string[]> {
+async function translateBatchWithDeepL(
+  texts: string[],
+  targetLang: string,
+  apiKey: string
+): Promise<string[]> {
   const langMap: Record<string, string> = {
-    zh: "ZH", en: "EN", ja: "JA", ko: "KO",
-    de: "DE", fr: "FR", es: "ES", it: "IT", ru: "RU", pt: "PT",
-    ar: "AR", nl: "NL", pl: "PL", tr: "TR", vi: "VI"
+    zh: "ZH",
+    en: "EN",
+    ja: "JA",
+    ko: "KO",
+    de: "DE",
+    fr: "FR",
+    es: "ES",
+    it: "IT",
+    ru: "RU",
+    pt: "PT",
+    ar: "AR",
+    nl: "NL",
+    pl: "PL",
+    tr: "TR",
+    vi: "VI"
   }
   const targetLangCode = langMap[targetLang] || "ZH"
   const isFreeAPI = apiKey.endsWith(":fx")
@@ -321,21 +412,35 @@ async function translateBatchWithDeepL(texts: string[], targetLang: string, apiK
   }
 
   // 若检测到的源语言与目标语言相同，返回原文（跳过翻译）
-  return data.translations.map((t: { text: string; detected_source_language: string }, i: number) => {
-    const detectedLang = t.detected_source_language?.toLowerCase()
-    const normalizedTarget = targetLangCode.toLowerCase().replace("-", "_").split("_")[0]
-    if (detectedLang && detectedLang === normalizedTarget) {
-      console.log(`[HN Dual] 跳过翻译: 源语言 (${detectedLang}) 与目标语言 (${normalizedTarget}) 相同`)
-      return texts[i]
+  return data.translations.map(
+    (t: { text: string; detected_source_language: string }, i: number) => {
+      const detectedLang = t.detected_source_language?.toLowerCase()
+      const normalizedTarget = targetLangCode
+        .toLowerCase()
+        .replace("-", "_")
+        .split("_")[0]
+      if (detectedLang && detectedLang === normalizedTarget) {
+        logger.debug("Skipping translation because source and target match", {
+          detectedLang,
+          normalizedTarget
+        })
+        return texts[i]
+      }
+      return t.text
     }
-    return t.text
-  })
+  )
 }
 
 // AI 摘要
-async function summarizeWithOpenAI(text: string, title: string, apiKey: string, baseUrl: string, model: string): Promise<string> {
+async function summarizeWithOpenAI(
+  text: string,
+  title: string,
+  apiKey: string,
+  baseUrl: string,
+  model: string
+): Promise<string> {
   const truncated = text.slice(0, 8000)
-  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const response = await fetch(getOpenAIChatCompletionsUrl(baseUrl), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -346,7 +451,8 @@ async function summarizeWithOpenAI(text: string, title: string, apiKey: string, 
       messages: [
         {
           role: "system",
-          content: "你是专业的文章摘要助手。请用中文提炼核心要点，使用「• 」开头的要点列表，简洁明了，控制在5条以内，每条不超过50字。只输出要点，不要有标题或前言。"
+          content:
+            "你是专业的文章摘要助手。请用中文提炼核心要点，使用「• 」开头的要点列表，简洁明了，控制在5条以内，每条不超过50字。只输出要点，不要有标题或前言。"
         },
         {
           role: "user",
@@ -359,11 +465,20 @@ async function summarizeWithOpenAI(text: string, title: string, apiKey: string, 
 
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(`OpenAI API 错误: ${error.error?.message || response.statusText}`)
+    throw new Error(
+      `OpenAI API 错误: ${error.error?.message || response.statusText}`
+    )
   }
 
   const data = await response.json()
   return data.choices[0].message.content.trim()
+}
+
+function getOpenAIChatCompletionsUrl(baseUrl: string): string {
+  const normalized = baseUrl.replace(/\/+$/, "")
+  return normalized.endsWith("/v1")
+    ? `${normalized}/chat/completions`
+    : `${normalized}/v1/chat/completions`
 }
 
 export {}

@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",
-    "package": "plasmo package"
+    "package": "plasmo package",
+    "test:e2e": "bun run build && bun e2e-test.mjs"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
@@ -22,6 +23,7 @@
     "@types/node": "20.11.5",
     "@types/react": "18.2.48",
     "@types/react-dom": "18.2.18",
+    "playwright": "1.59.1",
     "prettier": "3.2.4",
     "typescript": "5.3.3"
   },

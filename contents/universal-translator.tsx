@@ -1,6 +1,8 @@
+import { Readability } from "@mozilla/readability"
 import type { PlasmoCSConfig } from "plasmo"
 import { useEffect } from "react"
-import { Readability } from "@mozilla/readability"
+
+import { createLogger } from "~utils/logger"
 
 export const config: PlasmoCSConfig = {
   matches: ["<all_urls>"],
@@ -8,12 +10,16 @@ export const config: PlasmoCSConfig = {
   all_frames: false
 }
 
+const logger = createLogger("universal-translator")
+
 // 控制翻译内容的可见性
 const VISIBILITY_STYLE_ID = "hn-dual-visibility"
 const HIDE_CSS = `.hn-dual-translation { display: none !important; }`
 
 function applyVisibility(show: boolean) {
-  let el = document.getElementById(VISIBILITY_STYLE_ID) as HTMLStyleElement | null
+  let el = document.getElementById(
+    VISIBILITY_STYLE_ID
+  ) as HTMLStyleElement | null
   if (!show) {
     if (!el) {
       el = document.createElement("style")
@@ -28,11 +34,15 @@ function applyVisibility(show: boolean) {
 
 // 向 popup 报告进度
 function reportProgress(done: number, total: number) {
-  chrome.runtime.sendMessage({ type: "TRANSLATION_PROGRESS", done, total }).catch(() => {})
+  chrome.runtime
+    .sendMessage({ type: "TRANSLATION_PROGRESS", done, total })
+    .catch(() => {})
 }
 
 function reportComplete(total: number) {
-  chrome.runtime.sendMessage({ type: "TRANSLATION_COMPLETE", total }).catch(() => {})
+  chrome.runtime
+    .sendMessage({ type: "TRANSLATION_COMPLETE", total })
+    .catch(() => {})
 }
 
 function reportStopped() {
@@ -41,7 +51,9 @@ function reportStopped() {
 }
 
 function reportError(message: string) {
-  chrome.runtime.sendMessage({ type: "TRANSLATION_ERROR", message }).catch(() => {})
+  chrome.runtime
+    .sendMessage({ type: "TRANSLATION_ERROR", message })
+    .catch(() => {})
 }
 
 // 检测文章内容（增强社交平台支持）
@@ -50,11 +62,15 @@ function detectArticle() {
 
   // 社交平台专用选择器
   const SOCIAL_SELECTORS: Record<string, string> = {
-    "twitter.com": '[data-testid="tweetText"], [data-testid="tweet"] [lang], article [lang], [role="article"] [lang]',
-    "x.com": '[data-testid="tweetText"], [data-testid="tweet"] [lang], article [lang], [role="article"] [lang]',
-    "reddit.com": '[slot="text-body"] p, .RichTextJSON-root p, [data-click-id="text"] p, .md p, shreddit-comment [slot="comment"] p',
+    "twitter.com":
+      '[data-testid="tweetText"], [data-testid="tweet"] [lang], article [lang], [role="article"] [lang]',
+    "x.com":
+      '[data-testid="tweetText"], [data-testid="tweet"] [lang], article [lang], [role="article"] [lang]',
+    "reddit.com":
+      '[slot="text-body"] p, .RichTextJSON-root p, [data-click-id="text"] p, .md p, shreddit-comment [slot="comment"] p',
     "facebook.com": '[data-ad-preview="message"] div, [dir="auto"][style]',
-    "linkedin.com": '.feed-shared-update-v2__description-wrapper span[dir="ltr"], .update-components-text span[dir="ltr"]',
+    "linkedin.com":
+      '.feed-shared-update-v2__description-wrapper span[dir="ltr"], .update-components-text span[dir="ltr"]'
   }
 
   // 匹配社交平台
@@ -63,30 +79,33 @@ function detectArticle() {
   let paragraphs: HTMLElement[] = []
 
   if (socialKey) {
-    paragraphs = Array.from(document.querySelectorAll(SOCIAL_SELECTORS[socialKey]))
-      .filter((el) => (el.textContent?.trim() || "").length > 10) as HTMLElement[]
+    paragraphs = Array.from(
+      document.querySelectorAll(SOCIAL_SELECTORS[socialKey])
+    ).filter(
+      (el) => (el.textContent?.trim() || "").length > 10
+    ) as HTMLElement[]
   }
 
   // 通用文章选择器（社交平台没匹配到或结果为空时使用）
   if (paragraphs.length === 0) {
     const SELECTORS =
-      'article p, .post-content p, .entry-content p, .article-content p, ' +
-      '.content p, .story-body p, .article-body p, .td-post-content p, ' +
+      "article p, .post-content p, .entry-content p, .article-content p, " +
+      ".content p, .story-body p, .article-body p, .td-post-content p, " +
       '.jeg_post_content p, main p, [role="main"] p, #content p, #main p'
 
-    paragraphs = Array.from(document.querySelectorAll(SELECTORS))
-      .filter((p) => (p.textContent?.trim() || "").length > 50) as HTMLElement[]
+    paragraphs = Array.from(document.querySelectorAll(SELECTORS)).filter(
+      (p) => (p.textContent?.trim() || "").length > 50
+    ) as HTMLElement[]
   }
 
   // 兜底：页面上所有 <p>，过滤掉导航/页脚噪声
   if (paragraphs.length === 0) {
-    paragraphs = Array.from(document.querySelectorAll('p'))
-      .filter((p) => {
-        const text = p.textContent?.trim() || ""
-        if (text.length < 50) return false
-        const tag = p.closest('nav, footer, header, aside')
-        return !tag
-      }) as HTMLElement[]
+    paragraphs = Array.from(document.querySelectorAll("p")).filter((p) => {
+      const text = p.textContent?.trim() || ""
+      if (text.length < 50) return false
+      const tag = p.closest("nav, footer, header, aside")
+      return !tag
+    }) as HTMLElement[]
   }
 
   if (paragraphs.length === 0) return null
@@ -99,7 +118,7 @@ function detectArticle() {
     const article = reader.parse()
     if (article?.title) title = article.title
   } catch (error) {
-    console.error("Readability error (using document.title):", error)
+    logger.error("Readability error; using document.title", error)
   }
 
   return { title, paragraphs, isSocial: !!socialKey }
@@ -122,17 +141,20 @@ async function translateParagraph(paragraph: HTMLElement) {
 
   try {
     const response = await chrome.runtime.sendMessage({
-      type: "TRANSLATE", text, targetLang: lazyTargetLang
+      type: "TRANSLATE",
+      text,
+      targetLang: lazyTargetLang
     })
     if (response.translation) {
       const div = document.createElement("div")
       div.className = "hn-dual-translation"
-      div.style.cssText = "display:block;margin-top:0.15em;margin-bottom:0.6em;opacity:0.7;"
+      div.style.cssText =
+        "display:block;margin-top:0.15em;margin-bottom:0.6em;opacity:0.7;"
       div.textContent = response.translation
       paragraph.after(div)
     }
   } catch (error) {
-    console.error("Paragraph translation error:", error)
+    logger.error("Paragraph translation error", error)
   }
 
   lazyDone++
@@ -146,7 +168,7 @@ async function translatePage() {
   let article = detectArticle()
   // SPA 页面内容可能还没渲染，等 800ms 重试一次
   if (!article) {
-    await new Promise(r => setTimeout(r, 800))
+    await new Promise((r) => setTimeout(r, 800))
     article = detectArticle()
   }
   if (!article) {
@@ -157,7 +179,9 @@ async function translatePage() {
   const settings = await chrome.storage.sync.get(["targetLang"])
   lazyTargetLang = settings.targetLang || "zh"
 
-  const untranslatedParas = article.paragraphs.filter((p) => !p.querySelector(".hn-dual-translation"))
+  const untranslatedParas = article.paragraphs.filter(
+    (p) => !p.querySelector(".hn-dual-translation")
+  )
   lazyTotal = untranslatedParas.length + (article.paragraphs.length > 0 ? 1 : 0) // +1 for title
   lazyDone = 0
   reportProgress(0, lazyTotal)
@@ -167,17 +191,20 @@ async function translatePage() {
   if (titleElement && !titleElement.querySelector(".hn-dual-translation")) {
     try {
       const response = await chrome.runtime.sendMessage({
-        type: "TRANSLATE", text: article.title, targetLang: lazyTargetLang
+        type: "TRANSLATE",
+        text: article.title,
+        targetLang: lazyTargetLang
       })
       if (response.translation) {
         const div = document.createElement("div")
         div.className = "hn-dual-translation"
-        div.style.cssText = "font-size:0.75em;font-weight:normal;color:inherit;opacity:0.65;margin-top:2px;margin-bottom:8px;"
+        div.style.cssText =
+          "font-size:0.75em;font-weight:normal;color:inherit;opacity:0.65;margin-top:2px;margin-bottom:8px;"
         div.textContent = response.translation
         titleElement.appendChild(div)
       }
     } catch (error) {
-      console.error("Title translation error:", error)
+      logger.error("Title translation error", error)
     }
     lazyDone++
     reportProgress(lazyDone, lazyTotal)
@@ -187,14 +214,17 @@ async function translatePage() {
   if (lazyObserver) lazyObserver.disconnect()
 
   // 惰性翻译段落（rootMargin: 提前 300px）
-  lazyObserver = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (!entry.isIntersecting || shouldStop) continue
-      const el = entry.target as HTMLElement
-      lazyObserver?.unobserve(el)
-      translateParagraph(el)
-    }
-  }, { rootMargin: "300px 0px" })
+  lazyObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting || shouldStop) continue
+        const el = entry.target as HTMLElement
+        lazyObserver?.unobserve(el)
+        translateParagraph(el)
+      }
+    },
+    { rootMargin: "300px 0px" }
+  )
 
   for (const para of untranslatedParas) {
     lazyObserver.observe(para)
@@ -226,7 +256,7 @@ const UniversalTranslator = () => {
       }
       if (message.type === "GET_ARTICLE_TEXT") {
         let title = document.title
-        let text = ''
+        let text = ""
         try {
           const documentClone = document.cloneNode(true) as Document
           const reader = new Readability(documentClone)
@@ -237,19 +267,23 @@ const UniversalTranslator = () => {
         // Readability 失败时，从段落收集文本
         if (!text) {
           const SELECTORS =
-            'article p, .post-content p, .entry-content p, .article-content p, ' +
-            '.content p, .story-body p, .article-body p, .td-post-content p, ' +
+            "article p, .post-content p, .entry-content p, .article-content p, " +
+            ".content p, .story-body p, .article-body p, .td-post-content p, " +
             '.jeg_post_content p, main p, [role="main"] p, #content p, #main p'
-          let paras = Array.from(document.querySelectorAll(SELECTORS))
-            .filter((p) => (p.textContent?.trim() || '').length > 50)
+          let paras = Array.from(document.querySelectorAll(SELECTORS)).filter(
+            (p) => (p.textContent?.trim() || "").length > 50
+          )
           if (paras.length === 0) {
-            paras = Array.from(document.querySelectorAll('p'))
-              .filter((p) => {
-                const t = p.textContent?.trim() || ''
-                return t.length > 50 && !p.closest('nav, footer, header, aside')
-              })
+            paras = Array.from(document.querySelectorAll("p")).filter((p) => {
+              const t = p.textContent?.trim() || ""
+              return t.length > 50 && !p.closest("nav, footer, header, aside")
+            })
           }
-          text = paras.map((p) => p.textContent?.trim()).filter(Boolean).join('\n\n').slice(0, 8000)
+          text = paras
+            .map((p) => p.textContent?.trim())
+            .filter(Boolean)
+            .join("\n\n")
+            .slice(0, 8000)
         }
         sendResponse({ title, text })
       }
