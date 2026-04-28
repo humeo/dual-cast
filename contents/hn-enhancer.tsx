@@ -14,7 +14,7 @@ const logger = createLogger("hn-enhancer")
 const VISIBILITY_STYLE_ID = "hn-dual-visibility"
 const HIDE_CSS = `.hn-dual-translation, .hn-dual-comment-translation, .hn-dual-toptext-translation { display: none !important; }`
 const MANUAL_CONTROL_ID = "hn-dual-manual-control"
-const MANUAL_BATCH_SIZE = 5
+const MANUAL_BATCH_SIZE = 10
 
 interface ManualQueueItem {
   el: HTMLElement
